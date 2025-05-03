@@ -12,9 +12,31 @@ const Experience = () => {
     
     // Fetch experience data from localStorage
     const fetchData = () => {
-      const data = portfolioService.getSectionData('experience');
-      setExperienceData(data || []);
-      console.log("Experience data loaded:", data);
+      const dataPromise = portfolioService.getSectionData('experience');
+      
+      // Handle async data properly
+      if (dataPromise && dataPromise.then) {
+        dataPromise.then(data => {
+          if (Array.isArray(data)) {
+            setExperienceData(data);
+            console.log("Experience data loaded:", data);
+          } else {
+            setExperienceData([]);
+            console.log("No experience data found or invalid format");
+          }
+        }).catch(err => {
+          console.error("Error loading experience data:", err);
+          setExperienceData([]);
+        });
+      } else if (Array.isArray(dataPromise)) {
+        // Handle case where it might return data directly
+        setExperienceData(dataPromise);
+        console.log("Experience data loaded (direct):", dataPromise);
+      } else {
+        // Fallback to empty array
+        setExperienceData([]);
+        console.log("No experience data or invalid format");
+      }
     };
     
     // Initial data fetch
@@ -77,8 +99,24 @@ const Experience = () => {
   // Manually force an update to the component when localStorage is changed from this window
   useEffect(() => {
     const handleLocalChange = () => {
-      const data = portfolioService.getSectionData('experience');
-      setExperienceData(data || []);
+      const dataPromise = portfolioService.getSectionData('experience');
+      
+      // Handle async data properly
+      if (dataPromise && dataPromise.then) {
+        dataPromise.then(data => {
+          if (Array.isArray(data)) {
+            setExperienceData(data);
+          } else {
+            setExperienceData([]);
+          }
+        }).catch(() => {
+          setExperienceData([]);
+        });
+      } else if (Array.isArray(dataPromise)) {
+        setExperienceData(dataPromise);
+      } else {
+        setExperienceData([]);
+      }
     };
     
     window.addEventListener('localDataChanged', handleLocalChange);
@@ -89,7 +127,7 @@ const Experience = () => {
   }, []);
   
   // Check if we have experience data
-  if (experienceData.length === 0) {
+  if (!experienceData || experienceData.length === 0) {
     return null; // Don't render the section if no data
   }
   
@@ -100,17 +138,19 @@ const Experience = () => {
         
         <div className={styles.experienceGrid}>
           {experienceData.map((exp, index) => (
-            <div 
-              key={index} 
-              className={`${styles.expItem} ${styles.glassCard}`}
-              ref={el => experienceItems.current[index] = el}
-            >
-              <h3>{exp.position}</h3>
-              <h4>{exp.company}</h4>
-              <h5>{exp.location} | {exp.period}</h5>
-              <p>{exp.description}</p>
-            </div>
-          ))}
+            exp && (
+              <div 
+                key={index} 
+                className={`${styles.expItem} ${styles.glassCard}`}
+                ref={el => experienceItems.current[index] = el}
+              >
+                <h3>{exp.position || 'Position'}</h3>
+                <h4>{exp.company || 'Company'}</h4>
+                <h5>{exp.location || 'Location'} | {exp.period || 'Time Period'}</h5>
+                <p>{exp.description || ''}</p>
+              </div>
+            )
+          )).filter(Boolean)}
         </div>
       </div>
     </section>

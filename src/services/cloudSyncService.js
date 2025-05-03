@@ -26,14 +26,31 @@ const initCloudSync = async () => {
   try {
     console.log("Initializing cloud sync service...");
     
-    // Check if sync is enabled
-    const syncStatus = await fetchSyncStatus();
-    syncEnabled = syncStatus?.enabled || false;
+    // Set a timeout to avoid hanging if the API is not responsive
+    const timeoutPromise = new Promise((_, reject) => {
+      setTimeout(() => reject(new Error('Cloud sync initialization timed out')), 5000);
+    });
     
-    console.log(`Cloud sync ${syncEnabled ? 'enabled' : 'disabled'}`);
-    return syncEnabled;
+    try {
+      // Check if sync is enabled with a timeout
+      const syncStatusPromise = fetchSyncStatus();
+      const syncStatus = await Promise.race([syncStatusPromise, timeoutPromise]);
+      
+      // Default to disabled if there's an issue
+      syncEnabled = syncStatus?.enabled || false;
+      
+      console.log(`Cloud sync ${syncEnabled ? 'enabled' : 'disabled'}`);
+      return syncEnabled;
+    } catch (fetchError) {
+      console.error("Error fetching sync status:", fetchError);
+      // Default to disabled if we couldn't determine the status
+      syncEnabled = false;
+      return false;
+    }
   } catch (error) {
     console.error("Error initializing cloud sync:", error);
+    // Ensure sync is disabled on error
+    syncEnabled = false;
     return false;
   }
 };
@@ -170,9 +187,14 @@ const getAllFromCloud = async () => {
     
     // Fetch all sections in parallel
     await Promise.all(sections.map(async (section) => {
-      const data = await fetchFromCloud(section);
-      if (data) {
-        portfolio[section] = data;
+      try {
+        const data = await fetchFromCloud(section);
+        if (data) {
+          portfolio[section] = data;
+        }
+      } catch (sectionError) {
+        console.error(`Error fetching ${section}:`, sectionError);
+        // Continue with other sections even if one fails
       }
     }));
     
@@ -201,11 +223,27 @@ const initializeCloudData = async (allData) => {
     ];
     
     // Save all sections in parallel
-    await Promise.all(sections.map(async ({ key, data }) => {
-      await saveToCloud(key, data);
+    const results = await Promise.allSettled(sections.map(async ({ key, data }) => {
+      if (!data) return { key, success: false, reason: "No data provided" };
+      
+      try {
+        const success = await saveToCloud(key, data);
+        return { key, success };
+      } catch (error) {
+        return { key, success: false, reason: error.message };
+      }
     }));
     
-    return true;
+    // Log results for debugging
+    results.forEach(result => {
+      if (result.value.success) {
+        console.log(`Initialized ${result.value.key} in cloud successfully`);
+      } else {
+        console.error(`Failed to initialize ${result.value.key} in cloud: ${result.value.reason}`);
+      }
+    });
+    
+    return results.some(result => result.value.success);
   } catch (error) {
     console.error("Error initializing cloud data:", error);
     return false;

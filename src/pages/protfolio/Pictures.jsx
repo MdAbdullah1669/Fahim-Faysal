@@ -28,15 +28,35 @@ const Pictures = () => {
     
     // Fetch pictures data from localStorage
     const fetchData = () => {
-      let data = portfolioService.getSectionData('pictures');
+      const dataPromise = portfolioService.getSectionData('pictures');
       
-      // If no data exists, create sample data
-      if (!data || data.length === 0) {
-        data = createSamplePictureData();
+      // Handle async data properly
+      if (dataPromise && dataPromise.then) {
+        dataPromise.then(data => {
+          if (Array.isArray(data) && data.length > 0) {
+            setPicturesData(data);
+            console.log("Pictures data loaded:", data);
+          } else {
+            // If no data exists, create sample data
+            const sampleData = createSamplePictureData();
+            setPicturesData(sampleData);
+            console.log("Created sample pictures data:", sampleData);
+          }
+        }).catch(err => {
+          console.error("Error loading pictures data:", err);
+          const sampleData = createSamplePictureData();
+          setPicturesData(sampleData);
+        });
+      } else if (Array.isArray(dataPromise) && dataPromise.length > 0) {
+        // Handle case where it might return data directly
+        setPicturesData(dataPromise);
+        console.log("Pictures data loaded (direct):", dataPromise);
+      } else {
+        // Create sample data as fallback
+        const sampleData = createSamplePictureData();
+        setPicturesData(sampleData);
+        console.log("Created sample pictures data (fallback):", sampleData);
       }
-      
-      setPicturesData(data);
-      console.log("Pictures data loaded:", data);
     };
     
     // Initial data fetch
@@ -99,8 +119,28 @@ const Pictures = () => {
   // Manually force an update to the component when localStorage is changed from this window
   useEffect(() => {
     const handleLocalChange = () => {
-      const data = portfolioService.getSectionData('pictures');
-      setPicturesData(data || []);
+      const dataPromise = portfolioService.getSectionData('pictures');
+      
+      // Handle async data properly
+      if (dataPromise && dataPromise.then) {
+        dataPromise.then(data => {
+          if (Array.isArray(data) && data.length > 0) {
+            setPicturesData(data);
+          } else {
+            // If no data exists, create sample data
+            const sampleData = createSamplePictureData();
+            setPicturesData(sampleData);
+          }
+        }).catch(() => {
+          const sampleData = createSamplePictureData();
+          setPicturesData(sampleData);
+        });
+      } else if (Array.isArray(dataPromise) && dataPromise.length > 0) {
+        setPicturesData(dataPromise);
+      } else {
+        const sampleData = createSamplePictureData();
+        setPicturesData(sampleData);
+      }
     };
     
     window.addEventListener('localDataChanged', handleLocalChange);
@@ -111,7 +151,7 @@ const Pictures = () => {
   }, []);
   
   // Check if we have pictures data and if it contains images to display
-  if (picturesData.length === 0 || !picturesData.some(pic => pic.image)) {
+  if (!picturesData || picturesData.length === 0 || !picturesData.some(pic => pic && pic.image)) {
     return null; // Don't render the section if no data or no images
   }
   
@@ -122,7 +162,7 @@ const Pictures = () => {
         
         <div className={styles.picturesGrid}>
           {picturesData.map((picture, index) => (
-            picture.image && (
+            picture && picture.image && (
               <div 
                 key={index} 
                 className={`${styles.pictureCard}`}
@@ -131,14 +171,14 @@ const Pictures = () => {
                 <div className={styles.pictureImage}>
                   <img 
                     src={picture.image}
-                    alt={picture.title}
+                    alt={picture.title || 'Photography'}
                     className={styles.pictureImg}
                   />
                 </div>
                 <div className={styles.pictureContent}>
-                  <span className={styles.pictureTag}>{picture.category}</span>
-                  <h3>{picture.title}</h3>
-                  <p>{picture.description}</p>
+                  <span className={styles.pictureTag}>{picture.category || 'Photography'}</span>
+                  <h3>{picture.title || 'My Photography'}</h3>
+                  <p>{picture.description || ''}</p>
                   {picture.link && (
                     <a href={picture.link} className={styles.viewPicture} target="_blank" rel="noopener noreferrer">
                       View Full Size <i className="fas fa-external-link-alt"></i>

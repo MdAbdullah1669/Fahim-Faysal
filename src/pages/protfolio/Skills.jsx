@@ -10,9 +10,35 @@ const Skills = () => {
   useEffect(() => {
     // Fetch skills data from localStorage
     const fetchData = () => {
-      const data = portfolioService.getSectionData('skills');
-      if (data) {
-        setSkillsData(data);
+      const dataPromise = portfolioService.getSectionData('skills');
+      
+      // Handle async data properly
+      if (dataPromise && dataPromise.then) {
+        dataPromise.then(data => {
+          if (data && typeof data === 'object') {
+            setSkillsData({
+              technical: Array.isArray(data.technical) ? data.technical : [],
+              soft: Array.isArray(data.soft) ? data.soft : [],
+              languages: Array.isArray(data.languages) ? data.languages : []
+            });
+          } else {
+            // Reset to empty state if no valid data
+            setSkillsData({ technical: [], soft: [], languages: [] });
+          }
+        }).catch(err => {
+          console.error("Error loading skills data:", err);
+          setSkillsData({ technical: [], soft: [], languages: [] });
+        });
+      } else if (dataPromise && typeof dataPromise === 'object') {
+        // Handle case where it might return data directly
+        setSkillsData({
+          technical: Array.isArray(dataPromise.technical) ? dataPromise.technical : [],
+          soft: Array.isArray(dataPromise.soft) ? dataPromise.soft : [],
+          languages: Array.isArray(dataPromise.languages) ? dataPromise.languages : []
+        });
+      } else {
+        // Reset to empty state if no valid data
+        setSkillsData({ technical: [], soft: [], languages: [] });
       }
     };
     
@@ -132,16 +158,17 @@ const Skills = () => {
   
   // Function to render the appropriate active skills
   const getActiveSkills = () => {
-    return skillsData[activeTab] || [];
+    const skills = skillsData[activeTab];
+    return Array.isArray(skills) ? skills : [];
   };
   
   // Check if we have skills data
-  const hasSkills = Object.values(skillsData).some(category => category.length > 0);
+  const hasSkills = Object.values(skillsData).some(category => Array.isArray(category) && category.length > 0);
   if (!hasSkills) {
     return null; // Don't render the section if no data
   }
   
-  const hasLanguages = skillsData.languages && skillsData.languages.length > 0;
+  const hasLanguages = skillsData.languages && Array.isArray(skillsData.languages) && skillsData.languages.length > 0;
   
   return (
     <section id="skills" className={styles.skills}>
@@ -175,25 +202,27 @@ const Skills = () => {
         
         <div className={styles.skillsGrid}>
           {getActiveSkills().map((skill, index) => (
-            <div 
-              key={index} 
-              className={`${styles.skillCard} ${styles.glassCard}`}
-              ref={el => skillItems.current[index] = el}
-            >
-              <div className={styles.skillIcon}>
-                <i className={`fas fa-${getIconForSkill(skill.name)}`}></i>
+            skill && skill.name && (
+              <div 
+                key={index} 
+                className={`${styles.skillCard} ${styles.glassCard}`}
+                ref={el => skillItems.current[index] = el}
+              >
+                <div className={styles.skillIcon}>
+                  <i className={`fas fa-${getIconForSkill(skill.name)}`}></i>
+                </div>
+                <div className={styles.skillContent}>
+                  <h3>{skill.name}</h3>
+                  {skill.level && (
+                    <div className={styles.skillLevel}>
+                      <div className={`${styles.skillLevelBar} ${styles[skill.level] || styles.intermediate}`}></div>
+                      <p className={styles.skillLevelText}>{skill.level ? skill.level.charAt(0).toUpperCase() + skill.level.slice(1) : 'Intermediate'}</p>
+                    </div>
+                  )}
+                </div>
               </div>
-              <div className={styles.skillContent}>
-                <h3>{skill.name}</h3>
-                {skill.level && (
-                  <div className={styles.skillLevel}>
-                    <div className={`${styles.skillLevelBar} ${styles[skill.level]}`}></div>
-                    <p className={styles.skillLevelText}>{skill.level.charAt(0).toUpperCase() + skill.level.slice(1)}</p>
-                  </div>
-                )}
-              </div>
-            </div>
-          ))}
+            )
+          )).filter(Boolean)}
         </div>
       </div>
     </section>

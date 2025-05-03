@@ -24,15 +24,16 @@ const Portfolio = () => {
     }));
   };
   
-  // Fallback images for demo purposes
+  // Fallback images for demo purposes - Check if imports are available
   const fallbackImages = [
-    portfolioImage,
-    tradingChartImage, 
-    cyberfuturismImage,
-    profileSmilingImage,
-    japanShoreImage,
-    cryptoResearchImage
-  ];
+    placeholderImage, // Always use placeholder as first fallback
+    ...(portfolioImage ? [portfolioImage] : []),
+    ...(tradingChartImage ? [tradingChartImage] : []), 
+    ...(cyberfuturismImage ? [cyberfuturismImage] : []),
+    ...(profileSmilingImage ? [profileSmilingImage] : []),
+    ...(japanShoreImage ? [japanShoreImage] : []),
+    ...(cryptoResearchImage ? [cryptoResearchImage] : [])
+  ].filter(Boolean); // Filter out any undefined values
   
   useEffect(() => {
     // Initialize localStorage if needed
@@ -43,9 +44,31 @@ const Portfolio = () => {
     
     // Fetch projects data from localStorage
     const fetchData = () => {
-      const data = portfolioService.getSectionData('projects');
-      setProjectsData(data || []);
-      console.log("Projects data loaded:", data);
+      const dataPromise = portfolioService.getSectionData('projects');
+      
+      // Handle async data properly
+      if (dataPromise && dataPromise.then) {
+        dataPromise.then(data => {
+          if (Array.isArray(data)) {
+            setProjectsData(data);
+            console.log("Projects data loaded:", data);
+          } else {
+            setProjectsData([]);
+            console.log("No projects data found or invalid format");
+          }
+        }).catch(err => {
+          console.error("Error loading projects data:", err);
+          setProjectsData([]);
+        });
+      } else if (Array.isArray(dataPromise)) {
+        // Handle case where it might return data directly
+        setProjectsData(dataPromise);
+        console.log("Projects data loaded (direct):", dataPromise);
+      } else {
+        // Fallback to empty array
+        setProjectsData([]);
+        console.log("No projects data or invalid format");
+      }
     };
     
     // Initial data fetch
@@ -108,8 +131,24 @@ const Portfolio = () => {
   // Manually force an update to the component when localStorage is changed from this window
   useEffect(() => {
     const handleLocalChange = () => {
-      const data = portfolioService.getSectionData('projects');
-      setProjectsData(data || []);
+      const dataPromise = portfolioService.getSectionData('projects');
+      
+      // Handle async data properly
+      if (dataPromise && dataPromise.then) {
+        dataPromise.then(data => {
+          if (Array.isArray(data)) {
+            setProjectsData(data);
+          } else {
+            setProjectsData([]);
+          }
+        }).catch(() => {
+          setProjectsData([]);
+        });
+      } else if (Array.isArray(dataPromise)) {
+        setProjectsData(dataPromise);
+      } else {
+        setProjectsData([]);
+      }
     };
     
     window.addEventListener('localDataChanged', handleLocalChange);
@@ -120,7 +159,7 @@ const Portfolio = () => {
   }, []);
   
   // Check if we have projects data
-  if (projectsData.length === 0) {
+  if (!projectsData || projectsData.length === 0) {
     return null; // Don't render the section if no data
   }
   
@@ -131,51 +170,53 @@ const Portfolio = () => {
         
         <div className={styles.portfolioGrid}>
           {projectsData.map((project, index) => (
-            <div 
-              key={index} 
-              className={`${styles.projectCard}`}
-              ref={el => projectItems.current[index] = el}
-            >
-              <div className={styles.projectImage}>
-                <img 
-                  src={imageSources[project.title] || project.image || fallbackImages[index % fallbackImages.length]} 
-                  alt={project.title}
-                  onError={() => handleImageError(project.title)}
-                />
-              </div>
-              <div className={styles.projectContent}>
-                <span className={styles.projectTag}>{project.category}</span>
-                <h3>{project.title}</h3>
-                <p>{project.description}</p>
-                
-                {project.technologies && (
-                  <div className={styles.projectTools}>
-                    <h4>Technologies Used:</h4>
-                    <div className={styles.toolsContainer}>
-                      {project.technologies.split(',').map((tech, techIndex) => (
-                        <span key={techIndex} className={styles.toolTag}>
-                          {tech.trim()}
-                        </span>
-                      ))}
+            project && (
+              <div 
+                key={index} 
+                className={`${styles.projectCard}`}
+                ref={el => projectItems.current[index] = el}
+              >
+                <div className={styles.projectImage}>
+                  <img 
+                    src={imageSources[project.title] || project.image || (fallbackImages.length > 0 ? fallbackImages[index % fallbackImages.length] : placeholderImage)} 
+                    alt={project.title || 'Project'}
+                    onError={() => handleImageError(project.title || `project-${index}`)}
+                  />
+                </div>
+                <div className={styles.projectContent}>
+                  <span className={styles.projectTag}>{project.category || 'Project'}</span>
+                  <h3>{project.title || `Project ${index + 1}`}</h3>
+                  <p>{project.description || ''}</p>
+                  
+                  {project.technologies && (
+                    <div className={styles.projectTools}>
+                      <h4>Technologies Used:</h4>
+                      <div className={styles.toolsContainer}>
+                        {project.technologies.split(',').map((tech, techIndex) => (
+                          <span key={techIndex} className={styles.toolTag}>
+                            {tech.trim()}
+                          </span>
+                        ))}
+                      </div>
                     </div>
+                  )}
+                  
+                  <div className={styles.projectLinks}>
+                    {project.demoUrl && (
+                      <a href={project.demoUrl} className={styles.viewProject} target="_blank" rel="noopener noreferrer">
+                        Live Demo <i className="fas fa-external-link-alt"></i>
+                      </a>
+                    )}
+                    {project.repoUrl && (
+                      <a href={project.repoUrl} className={styles.viewSource} target="_blank" rel="noopener noreferrer">
+                        Source <i className="fab fa-github"></i>
+                      </a>
+                    )}
                   </div>
-                )}
-                
-                <div className={styles.projectLinks}>
-                  {project.demoUrl && (
-                    <a href={project.demoUrl} className={styles.viewProject} target="_blank" rel="noopener noreferrer">
-                      Live Demo <i className="fas fa-external-link-alt"></i>
-                    </a>
-                  )}
-                  {project.repoUrl && (
-                    <a href={project.repoUrl} className={styles.viewSource} target="_blank" rel="noopener noreferrer">
-                      Source <i className="fab fa-github"></i>
-                    </a>
-                  )}
                 </div>
               </div>
-            </div>
-          ))}
+            )
+          )).filter(Boolean)}
         </div>
       </div>
     </section>

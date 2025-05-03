@@ -12,103 +12,214 @@ const AdminDashboard = () => {
 
   // Initialize portfolio data on component mount
   useEffect(() => {
-    portfolioService.initializeStorage();
+    try {
+      const init = async () => {
+        try {
+          await portfolioService.initializeStorage();
+        } catch (initError) {
+          console.error("Error initializing storage:", initError);
+        }
+      };
+      init();
+    } catch (error) {
+      console.error("Initialization error:", error);
+    }
   }, []);
 
   // Load portfolio data on component mount
   useEffect(() => {
-    const data = portfolioService.getAllData();
-
-    // Set document title with username
-    document.title = `${
-      data.personalInfo.name || "Fahim Faysal"
-    } - Portfolio Dashboard`;
-
-    // Update portfolio stats for dashboard
-    setPortfolioData({
-      name: data.personalInfo.name || "Fahim Faysal",
-      title: data.personalInfo.jobTitle || "Web Developer",
-      projectsCount: data.projects.length,
-      educationCount: data.education.length,
-      skillsCount:
-        data.skills.technical.length +
-        data.skills.soft.length +
-        data.skills.languages.length,
-      portfolioViews: portfolioService.getPortfolioViews?.() || 0, // Optional chaining to safely handle missing method
-    });
-
-    // Set personal info data
-    setPersonalInfo(data.personalInfo);
-
-    // Set education data
-    setEducationEntries(data.education);
-
-    // Load experience data
-    setExperienceEntries(data.experience);
-
-    // Load skills data
-    setSkillsData(data.skills);
-
-    // Load highlight data
-    setHighlightEntries(data.highlights);
-
-    // Load project data
-    setProjectEntries(data.projects);
-
-    // Load pictures data
-    setPictureEntries(data.pictures);
-
-    // Load references data
-    setReferenceEntries(data.references);
-
-    // Load recent activity data
-    const storedActivity = localStorage.getItem("portfolio_recent_activity");
-    if (storedActivity) {
-      setRecentActivity(JSON.parse(storedActivity));
-    } else {
-      // Try to get from sessionStorage if not in localStorage
-      const sessionActivity = sessionStorage.getItem(
-        "portfolio_recent_activity"
-      );
-      if (sessionActivity) {
-        const parsedActivity = JSON.parse(sessionActivity);
-        setRecentActivity(parsedActivity);
-        // Restore to localStorage
-        localStorage.setItem("portfolio_recent_activity", sessionActivity);
-      } else {
-        // Initialize with some default activity if none exists
-        const defaultActivity = [
-          {
-            type: "edit",
-            section: "Personal Information",
-            timestamp: new Date().toISOString(),
-          },
-          {
-            type: "add",
-            section: "Projects",
-            name: "Personal Portfolio",
-            timestamp: new Date(
-              new Date().setDate(new Date().getDate() - 1)
-            ).toISOString(),
-          },
-          {
-            type: "edit",
-            section: "Skills",
-            timestamp: new Date(
-              new Date().setDate(new Date().getDate() - 1)
-            ).toISOString(),
-          },
-        ];
-        setRecentActivity(defaultActivity);
-        localStorage.setItem(
-          "portfolio_recent_activity",
-          JSON.stringify(defaultActivity)
-        );
-        sessionStorage.setItem(
-          "portfolio_recent_activity",
-          JSON.stringify(defaultActivity)
-        );
+    const loadData = async () => {
+      let data = null;
+      
+      try {
+        // Create a safer way to load the data
+        const safeGetAllData = async () => {
+          // Try to get data with cloud sync safely handled
+          try {
+            return await portfolioService.getAllData();
+          } catch (error) {
+            console.error("Error in portfolioService.getAllData:", error);
+            return null;
+          }
+        };
+        
+        // Wait for data loading with a safety timeout
+        const timeoutPromise = new Promise(resolve => {
+          setTimeout(() => {
+            console.warn("Data loading timed out, using defaults");
+            resolve(null);
+          }, 3000);
+        });
+        
+        // Race between normal loading and timeout
+        data = await Promise.race([safeGetAllData(), timeoutPromise]);
+      } catch (fetchError) {
+        console.error("Error in data loading process:", fetchError);
       }
+      
+      // Initialize with default empty data structure rather than failing
+      if (!data) {
+        data = {
+          personalInfo: { name: "Fahim Faysal", jobTitle: "Web Developer" },
+          projects: [],
+          education: [],
+          experience: [],
+          skills: { technical: [], soft: [], languages: [] },
+          highlights: [],
+          pictures: [],
+          references: []
+        };
+      }
+
+      // Make sure we always have a valid data object
+      if (!data || typeof data !== 'object') {
+        console.error("Portfolio data is invalid or missing, using default data");
+        data = {
+          personalInfo: { name: "Fahim Faysal", jobTitle: "Web Developer" },
+          projects: [],
+          education: [],
+          experience: [],
+          skills: { technical: [], soft: [], languages: [] },
+          highlights: [],
+          pictures: [],
+          references: []
+        };
+      }
+
+      // Safely access data properties with fallbacks
+      const personalInfo = data.personalInfo || { name: "Fahim Faysal", jobTitle: "Web Developer" };
+      const projects = Array.isArray(data.projects) ? data.projects : [];
+      const education = Array.isArray(data.education) ? data.education : [];
+      const skills = data.skills || { technical: [], soft: [], languages: [] };
+      const highlights = Array.isArray(data.highlights) ? data.highlights : [];
+      const pictures = Array.isArray(data.pictures) ? data.pictures : [];
+      const references = Array.isArray(data.references) ? data.references : [];
+
+      // Set document title with username
+      document.title = `${personalInfo.name || "Fahim Faysal"} - Portfolio Dashboard`;
+
+      // Update portfolio stats for dashboard
+      setPortfolioData({
+        name: personalInfo.name || "Fahim Faysal",
+        title: personalInfo.jobTitle || "Web Developer",
+        projectsCount: projects.length,
+        educationCount: education.length,
+        skillsCount: 
+          (Array.isArray(skills.technical) ? skills.technical.length : 0) +
+          (Array.isArray(skills.soft) ? skills.soft.length : 0) +
+          (Array.isArray(skills.languages) ? skills.languages.length : 0),
+        portfolioViews: (() => {
+          try {
+            // Check if the method exists and is a function
+            if (typeof portfolioService.getPortfolioViews === 'function') {
+              return portfolioService.getPortfolioViews() || 0;
+            }
+            return 0;
+          } catch (error) {
+            console.error("Error getting portfolio views:", error);
+            return 0;
+          }
+        })() // Self-executing function for safe evaluation
+      });
+
+      // Set personal info data
+      setPersonalInfo(personalInfo);
+
+      // Set education data
+      setEducationEntries(education);
+
+      // Load experience data
+      setExperienceEntries(Array.isArray(data.experience) ? data.experience : []);
+
+      // Load skills data
+      setSkillsData({
+        technical: Array.isArray(skills.technical) ? skills.technical : [],
+        soft: Array.isArray(skills.soft) ? skills.soft : [],
+        languages: Array.isArray(skills.languages) ? skills.languages : [],
+      });
+
+      // Load highlight data
+      setHighlightEntries(highlights);
+
+      // Load project data
+      setProjectEntries(projects);
+
+      // Load pictures data
+      setPictureEntries(pictures);
+
+      // Load references data
+      setReferenceEntries(references);
+    };
+
+    try {
+      // Call the async function
+      loadData();
+    } catch (error) {
+      console.error("Error loading portfolio data:", error);
+      // Handle error - perhaps show a notification
+    }
+    
+    // Load recent activity data
+    try {
+      const storedActivity = localStorage.getItem("portfolio_recent_activity");
+      if (storedActivity) {
+        try {
+          setRecentActivity(JSON.parse(storedActivity));
+        } catch (e) {
+          console.error("Error parsing recent activity from localStorage:", e);
+          setRecentActivity([]);
+        }
+      } else {
+        // Try to get from sessionStorage if not in localStorage
+        const sessionActivity = sessionStorage.getItem("portfolio_recent_activity");
+        if (sessionActivity) {
+          try {
+            const parsedActivity = JSON.parse(sessionActivity);
+            setRecentActivity(parsedActivity);
+            // Restore to localStorage
+            localStorage.setItem("portfolio_recent_activity", sessionActivity);
+          } catch (e) {
+            console.error("Error parsing recent activity from sessionStorage:", e);
+            setRecentActivity([]);
+          }
+        } else {
+          // Initialize with some default activity if none exists
+          const defaultActivity = [
+            {
+              type: "edit",
+              section: "Personal Information",
+              timestamp: new Date().toISOString(),
+            },
+            {
+              type: "add",
+              section: "Projects",
+              name: "Personal Portfolio",
+              timestamp: new Date(
+                new Date().setDate(new Date().getDate() - 1)
+              ).toISOString(),
+            },
+            {
+              type: "edit",
+              section: "Skills",
+              timestamp: new Date(
+                new Date().setDate(new Date().getDate() - 1)
+              ).toISOString(),
+            },
+          ];
+          setRecentActivity(defaultActivity);
+          localStorage.setItem(
+            "portfolio_recent_activity",
+            JSON.stringify(defaultActivity)
+          );
+          sessionStorage.setItem(
+            "portfolio_recent_activity",
+            JSON.stringify(defaultActivity)
+          );
+        }
+      }
+    } catch (error) {
+      console.error("Error handling recent activity:", error);
+      setRecentActivity([]);
     }
   }, []);
 
@@ -236,26 +347,67 @@ const AdminDashboard = () => {
   // Load settings data when section changes
   useEffect(() => {
     if (activeSection === "settings") {
-      const settingsData = portfolioService.getSectionData("settings");
-      setSettingsData(
-        settingsData || {
-          auth: {
-            username: "",
-            email: "",
-            passwordHash: "",
-          },
-          portfolioTitle: "",
-          faviconUrl: "",
-          accentColor: "",
-          secondaryColor: "",
-          metaDescription: "",
+      const loadSettings = async () => {
+        try {
+          const settingsData = await portfolioService.getSectionData("settings");
+          if (settingsData && typeof settingsData === 'object') {
+            setSettingsData(settingsData);
+            // Also check cloud sync status
+            if (typeof portfolioService.isCloudSyncEnabled === 'function') {
+              try {
+                // Check if it returns a promise or direct value
+                const syncStatus = portfolioService.isCloudSyncEnabled();
+                if (syncStatus && typeof syncStatus.then === 'function') {
+                  // It's a promise
+                  syncStatus.then(enabled => {
+                    setCloudSyncEnabled(Boolean(enabled));
+                  }).catch(err => {
+                    console.error("Error checking cloud sync status:", err);
+                    setCloudSyncEnabled(false);
+                  });
+                } else {
+                  // It's a direct value
+                  setCloudSyncEnabled(Boolean(syncStatus));
+                }
+              } catch (err) {
+                console.error("Error checking cloud sync status:", err);
+                setCloudSyncEnabled(false);
+              }
+            }
+          } else {
+            // Use default settings if none found
+            setSettingsData({
+              auth: {
+                username: "",
+                email: "",
+                passwordHash: "",
+              },
+              portfolioTitle: "",
+              faviconUrl: "",
+              accentColor: "",
+              secondaryColor: "",
+              metaDescription: "",
+            });
+          }
+        } catch (error) {
+          console.error("Error loading settings:", error);
+          // Use default settings on error
+          setSettingsData({
+            auth: {
+              username: "",
+              email: "",
+              passwordHash: "",
+            },
+            portfolioTitle: "",
+            faviconUrl: "",
+            accentColor: "",
+            secondaryColor: "",
+            metaDescription: "",
+          });
         }
-      );
-      
-      // Check if cloud sync is enabled
-      portfolioService.isCloudSyncEnabled().then(enabled => {
-        setCloudSyncEnabled(enabled);
-      });
+      };
+
+      loadSettings();
     }
   }, [activeSection]);
 
@@ -273,50 +425,77 @@ const AdminDashboard = () => {
   };
 
   // Function to change active section
-  const changeSection = (section) => {
+  const changeSection = async (section) => {
     setActiveSection(section);
 
+    // Helper function to safely load data
+    const loadSectionData = async (sectionName, setter, defaultValue = []) => {
+      try {
+        const data = await portfolioService.getSectionData(sectionName);
+        if (data) {
+          setter(data);
+        } else {
+          setter(defaultValue);
+        }
+      } catch (error) {
+        console.error(`Error loading ${sectionName} data:`, error);
+        setter(defaultValue);
+      }
+    };
+
     // Load section-specific data
-    if (section === "personal") {
-      const personalData = portfolioService.getSectionData("personal");
-      if (personalData) {
-        setPersonalInfo(personalData);
+    try {
+      if (section === "personal") {
+        await loadSectionData("personalInfo", setPersonalInfo, {
+          name: "",
+          jobTitle: "",
+          introText: "",
+          bio: "",
+          email: "",
+          phone: "",
+          location: "",
+          website: "",
+          socialLinks: {
+            linkedin: "",
+            github: "",
+            twitter: "",
+            instagram: "",
+          },
+          hero: {
+            greeting: "Hello, I'm",
+            description: "",
+            stats: [
+              { value: "5+", label: "Years Experience" },
+              { value: "100+", label: "Projects Completed" },
+              { value: "50+", label: "Happy Clients" },
+            ],
+            buttonText: "Get In Touch",
+            profileImageUrl: null,
+          },
+          aboutImageUrl: null,
+        });
+      } else if (section === "education") {
+        await loadSectionData("education", setEducationEntries);
+      } else if (section === "experience") {
+        await loadSectionData("experience", setExperienceEntries);
+      } else if (section === "skills") {
+        await loadSectionData("skills", setSkillsData, {
+          technical: [],
+          soft: [],
+          languages: [],
+        });
+      } else if (section === "highlights") {
+        await loadSectionData("highlights", setHighlightEntries);
+      } else if (section === "projects") {
+        await loadSectionData("projects", setProjectEntries);
+      } else if (section === "pictures") {
+        await loadSectionData("pictures", setPictureEntries);
+      } else if (section === "references") {
+        await loadSectionData("references", setReferenceEntries);
       }
-    } else if (section === "education") {
-      const educationData = portfolioService.getSectionData("education");
-      if (educationData) {
-        setEducationEntries(educationData);
-      }
-    } else if (section === "experience") {
-      const experienceData = portfolioService.getSectionData("experience");
-      if (experienceData) {
-        setExperienceEntries(experienceData);
-      }
-    } else if (section === "skills") {
-      const skillsData = portfolioService.getSectionData("skills");
-      if (skillsData) {
-        setSkillsData(skillsData);
-      }
-    } else if (section === "highlights") {
-      const highlightsData = portfolioService.getSectionData("highlights");
-      if (highlightsData) {
-        setHighlightEntries(highlightsData);
-      }
-    } else if (section === "projects") {
-      const projectsData = portfolioService.getSectionData("projects");
-      if (projectsData) {
-        setProjectEntries(projectsData);
-      }
-    } else if (section === "pictures") {
-      const picturesData = portfolioService.getSectionData("pictures");
-      if (picturesData) {
-        setPictureEntries(picturesData);
-      }
-    } else if (section === "references") {
-      const referencesData = portfolioService.getSectionData("references");
-      if (referencesData) {
-        setReferenceEntries(referencesData);
-      }
+    } catch (error) {
+      console.error("Error in changeSection:", error);
+      showNotification("Error loading section data", "error");
     }
   };
 
@@ -357,7 +536,7 @@ const AdminDashboard = () => {
   };
 
   // Personal Info Section Functions
-  const updatePersonalInfo = (field, value) => {
+  const updatePersonalInfo = (field, value, autoSave = false) => {
     // For URL fields, ensure they start with https:// if not empty
     if (
       field.startsWith("socialLinks.") &&
@@ -367,40 +546,103 @@ const AdminDashboard = () => {
       value = "https://" + value;
     }
 
+    let updatedInfo = {};
+    
     setPersonalInfo((prevInfo) => {
+      let newInfo = {};
+      
       if (field.includes(".")) {
         // Handle nested fields like socialLinks.linkedin or hero.greeting
         const parts = field.split(".");
         if (parts.length === 2) {
           const [parent, child] = parts;
-          return {
+          newInfo = {
             ...prevInfo,
             [parent]: {
               ...(prevInfo[parent] || {}),
               [child]: value,
             },
           };
+        } else if (parts.length === 3) {
+          // Handle deeply nested fields like hero.stats.0.value
+          const [parent, middle, child] = parts;
+          
+          // Special case for array items like hero.stats.0
+          if (!isNaN(parseInt(middle))) {
+            const index = parseInt(middle);
+            const parentArray = [...(prevInfo[parent] || [])];
+            
+            // Ensure array has enough items
+            while (parentArray.length <= index) {
+              parentArray.push({});
+            }
+            
+            // Update the specific item
+            parentArray[index] = {
+              ...parentArray[index],
+              [child]: value
+            };
+            
+            newInfo = {
+              ...prevInfo,
+              [parent]: parentArray
+            };
+          } else {
+            // Handle object nesting like hero.settings.color
+            newInfo = {
+              ...prevInfo,
+              [parent]: {
+                ...(prevInfo[parent] || {}),
+                [middle]: {
+                  ...(prevInfo[parent]?.[middle] || {}),
+                  [child]: value
+                }
+              }
+            };
+          }
         }
+      } else {
+        newInfo = { ...prevInfo, [field]: value };
       }
-      return { ...prevInfo, [field]: value };
+      
+      updatedInfo = newInfo;
+      return newInfo;
     });
+    
+    // If autoSave is true, save the updated info immediately
+    if (autoSave) {
+      // Use setTimeout to ensure state update has finished
+      setTimeout(async () => {
+        try {
+          await portfolioService.saveSectionData("personalInfo", updatedInfo);
+          console.log(`Auto-saved personal info field: ${field}`);
+        } catch (error) {
+          console.error(`Error auto-saving personal info field ${field}:`, error);
+        }
+      }, 0);
+    }
   };
 
-  const savePersonalInfoChanges = () => {
-    // Save to service with the correct section name
-    portfolioService.saveSectionData("personalInfo", personalInfo);
+  const savePersonalInfoChanges = async () => {
+    try {
+      // Save to service with the correct section name
+      await portfolioService.saveSectionData("personalInfo", personalInfo);
 
-    // Log activity
-    logActivity("edit", "Personal Information");
+      // Log activity
+      logActivity("edit", "Personal Information");
 
-    showNotification(
-      "Personal information and hero section saved successfully!"
-    );
-    setPortfolioData((prev) => ({
-      ...prev,
-      name: personalInfo.name,
-      title: personalInfo.jobTitle,
-    }));
+      showNotification(
+        "Personal information and hero section saved successfully!"
+      );
+      setPortfolioData((prev) => ({
+        ...prev,
+        name: personalInfo.name,
+        title: personalInfo.jobTitle,
+      }));
+    } catch (error) {
+      console.error("Error saving personal info:", error);
+      showNotification("Error saving personal information. Please try again.", "error");
+    }
   };
 
   // Education Section Functions
@@ -470,16 +712,20 @@ const AdminDashboard = () => {
     setDeleteEducationIndex(null);
   };
 
-  const saveEducationChanges = () => {
-    portfolioService.saveSectionData("education", educationEntries);
-    logActivity("edit", "Education");
-    showNotification("Education saved successfully!");
-
-    // Update portfolio stats
-    setPortfolioData((prev) => ({
-      ...prev,
-      educationCount: educationEntries.length,
-    }));
+  const saveEducationChanges = async () => {
+    try {
+      await portfolioService.saveSectionData("education", educationEntries);
+      logActivity("edit", "Education");
+      showNotification("Education entries saved successfully!");
+      // Update education count in dashboard stats
+      setPortfolioData((prev) => ({
+        ...prev,
+        educationCount: educationEntries.length,
+      }));
+    } catch (error) {
+      console.error("Error saving education entries:", error);
+      showNotification("Error saving education entries. Please try again.", "error");
+    }
   };
 
   // Experience Section Functions
@@ -518,16 +764,21 @@ const AdminDashboard = () => {
     );
   };
 
-  const saveExperienceChanges = () => {
-    portfolioService.saveSectionData("experience", experienceEntries);
-    logActivity("edit", "Experience");
-    showNotification("Experience saved successfully!");
+  const saveExperienceChanges = async () => {
+    try {
+      await portfolioService.saveSectionData("experience", experienceEntries);
+      logActivity("edit", "Experience");
+      showNotification("Experience saved successfully!");
 
-    // Update portfolio stats
-    setPortfolioData((prev) => ({
-      ...prev,
-      experienceCount: experienceEntries.length,
-    }));
+      // Update portfolio stats
+      setPortfolioData((prev) => ({
+        ...prev,
+        experienceCount: experienceEntries.length,
+      }));
+    } catch (error) {
+      console.error("Error saving experience data:", error);
+      showNotification("Error saving experience data. Please try again.", "error");
+    }
   };
 
   // Highlights Section Functions
@@ -565,10 +816,15 @@ const AdminDashboard = () => {
     );
   };
 
-  const saveHighlightChanges = () => {
-    portfolioService.saveSectionData("highlights", highlightEntries);
-    logActivity("edit", "Highlights");
-    showNotification("Highlights saved successfully!");
+  const saveHighlightChanges = async () => {
+    try {
+      await portfolioService.saveSectionData("highlights", highlightEntries);
+      logActivity("edit", "Highlights");
+      showNotification("Highlights saved successfully!");
+    } catch (error) {
+      console.error("Error saving highlights data:", error);
+      showNotification("Error saving highlights data. Please try again.", "error");
+    }
   };
 
   // Projects Section Functions
@@ -606,16 +862,21 @@ const AdminDashboard = () => {
     logActivity("delete", "Projects", deletedProject.title || "Project Entry");
   };
 
-  const saveProjectChanges = () => {
-    portfolioService.saveSectionData("projects", projectEntries);
-    logActivity("edit", "Projects");
-    showNotification("Projects saved successfully!");
+  const saveProjectChanges = async () => {
+    try {
+      await portfolioService.saveSectionData("projects", projectEntries);
+      logActivity("edit", "Projects");
+      showNotification("Projects saved successfully!");
 
-    // Update portfolio stats
-    setPortfolioData((prev) => ({
-      ...prev,
-      projectsCount: projectEntries.length,
-    }));
+      // Update portfolio stats
+      setPortfolioData((prev) => ({
+        ...prev,
+        projectsCount: projectEntries.length,
+      }));
+    } catch (error) {
+      console.error("Error saving projects data:", error);
+      showNotification("Error saving projects data. Please try again.", "error");
+    }
   };
 
   // Pictures Section Functions
@@ -650,10 +911,15 @@ const AdminDashboard = () => {
     logActivity("delete", "Pictures", deletedPicture.title || "Picture Entry");
   };
 
-  const savePictureChanges = () => {
-    portfolioService.saveSectionData("pictures", pictureEntries);
-    logActivity("edit", "Pictures");
-    showNotification("Pictures saved successfully!");
+  const savePictureChanges = async () => {
+    try {
+      await portfolioService.saveSectionData("pictures", pictureEntries);
+      logActivity("edit", "Pictures");
+      showNotification("Pictures saved successfully!");
+    } catch (error) {
+      console.error("Error saving pictures data:", error);
+      showNotification("Error saving pictures data. Please try again.", "error");
+    }
   };
 
   // References Section Functions
@@ -692,26 +958,36 @@ const AdminDashboard = () => {
     );
   };
 
-  const saveReferenceChanges = () => {
-    portfolioService.saveSectionData("references", referenceEntries);
-    logActivity("edit", "References");
-    showNotification("References saved successfully!");
+  const saveReferenceChanges = async () => {
+    try {
+      await portfolioService.saveSectionData("references", referenceEntries);
+      logActivity("edit", "References");
+      showNotification("References saved successfully!");
+    } catch (error) {
+      console.error("Error saving references data:", error);
+      showNotification("Error saving references data. Please try again.", "error");
+    }
   };
 
   // Skills Section Functions
-  const saveSkillsChanges = () => {
-    portfolioService.saveSectionData("skills", skillsData);
-    logActivity("edit", "Skills");
-    showNotification("Skills saved successfully!");
+  const saveSkillsChanges = async () => {
+    try {
+      await portfolioService.saveSectionData("skills", skillsData);
+      logActivity("edit", "Skills");
+      showNotification("Skills saved successfully!");
 
-    // Update portfolio stats
-    setPortfolioData((prev) => ({
-      ...prev,
-      skillsCount:
-        skillsData.technical.length +
-        skillsData.soft.length +
-        skillsData.languages.length,
-    }));
+      // Update portfolio stats
+      setPortfolioData((prev) => ({
+        ...prev,
+        skillsCount:
+          skillsData.technical.length +
+          skillsData.soft.length +
+          skillsData.languages.length,
+      }));
+    } catch (error) {
+      console.error("Error saving skills data:", error);
+      showNotification("Error saving skills data. Please try again.", "error");
+    }
   };
 
   const addSkill = (type, name = "", level = "intermediate") => {
@@ -869,28 +1145,41 @@ const AdminDashboard = () => {
   };
 
   // Save settings changes
-  const saveSettingsChanges = () => {
-    portfolioService.saveSectionData("settings", settingsData);
-    showNotification("Settings saved successfully");
+  const saveSettingsChanges = async () => {
+    try {
+      await portfolioService.saveSectionData("settings", settingsData);
+      showNotification("Settings saved successfully");
+    } catch (error) {
+      console.error("Error saving settings:", error);
+      showNotification("Error saving settings. Please try again.", "error");
+    }
   };
 
   // Listen for storage changes
   useEffect(() => {
-    const handleStorageChange = (e) => {
+    const handleStorageChange = async (e) => {
       if (e.key === "portfolio_personal_info" || e.key === "lastUpdate") {
-        const personalData = portfolioService.getSectionData("personalInfo");
-        if (personalData) {
-          setPersonalInfo(personalData);
+        try {
+          const personalData = await portfolioService.getSectionData("personalInfo");
+          if (personalData) {
+            setPersonalInfo(personalData);
+          }
+        } catch (error) {
+          console.error("Error handling storage change for personal info:", error);
         }
       }
     };
 
     // Also listen for custom local data changed events
-    const handleLocalDataChanged = (e) => {
+    const handleLocalDataChanged = async (e) => {
       if (e.detail?.key === "portfolio_personal_info") {
-        const personalData = portfolioService.getSectionData("personalInfo");
-        if (personalData) {
-          setPersonalInfo(personalData);
+        try {
+          const personalData = await portfolioService.getSectionData("personalInfo");
+          if (personalData) {
+            setPersonalInfo(personalData);
+          }
+        } catch (error) {
+          console.error("Error handling local data change for personal info:", error);
         }
       }
     };
@@ -1041,9 +1330,14 @@ const AdminDashboard = () => {
   };
 
   // Add the export function after other utility functions
-  const exportPortfolioData = () => {
+  const exportPortfolioData = async () => {
     try {
-      const data = portfolioService.getAllData();
+      const data = await portfolioService.getAllData();
+      
+      if (!data) {
+        showNotification("Failed to load portfolio data for export", "error");
+        return;
+      }
       
       // Create formatted JSON string with indentation for better readability
       const jsonData = JSON.stringify(data, null, 2);
@@ -1068,10 +1362,10 @@ const AdminDashboard = () => {
       }, 100);
       
       // Show notification
-      showNotification("Portfolio data exported successfully", "success");
+      showNotification("Portfolio data exported successfully");
     } catch (error) {
       console.error("Error exporting portfolio data:", error);
-      showNotification("Error exporting portfolio data", "error");
+      showNotification("Error exporting data. Please try again.", "error");
     }
   };
 
@@ -1587,30 +1881,37 @@ const AdminDashboard = () => {
                                       );
 
                                     if (success) {
-                                      // Refresh personal info data
-                                      const updatedData =
-                                        portfolioService.getSectionData(
-                                          "personalInfo"
-                                        );
-                                      if (updatedData) {
-                                        setPersonalInfo(updatedData);
-                                        console.log(
-                                          "Updated personal info state:",
-                                          updatedData
-                                        );
-                                      }
+                                      // Wrap in async IIFE to handle the async getSectionData
+                                      (async () => {
+                                        try {
+                                          // Refresh personal info data - wait for the async data
+                                          const updatedData = await portfolioService.getSectionData(
+                                            "personalInfo"
+                                          );
+                                          if (updatedData) {
+                                            setPersonalInfo(updatedData);
+                                            console.log(
+                                              "Updated personal info state:",
+                                              updatedData
+                                            );
+                                          }
 
-                                      // Show success notification
-                                      showNotification(
-                                        "Profile image updated successfully!",
-                                        "success"
-                                      );
+                                          // Show success notification
+                                          showNotification(
+                                            "Profile image updated successfully!",
+                                            "success"
+                                          );
 
-                                      // Force refresh in the window to show updates
-                                      setTimeout(() => {
-                                        // Check if the image was properly saved
-                                        portfolioService.debugPortfolioData();
-                                      }, 500);
+                                          // Force refresh in the window to show updates
+                                          setTimeout(() => {
+                                            // Check if the image was properly saved
+                                            portfolioService.debugPortfolioData();
+                                          }, 500);
+                                        } catch (error) {
+                                          console.error("Error fetching updated personal info:", error);
+                                          showNotification("Error updating profile data.", "error");
+                                        }
+                                      })();
                                     } else {
                                       showNotification(
                                         "Failed to update profile image.",
@@ -1660,20 +1961,27 @@ const AdminDashboard = () => {
                                   portfolioService.fixHeroImageData(null);
 
                                 if (success) {
-                                  // Refresh personal info data
-                                  const updatedData =
-                                    portfolioService.getSectionData(
-                                      "personalInfo"
-                                    );
-                                  if (updatedData) {
-                                    setPersonalInfo(updatedData);
-                                  }
+                                  // Wrap in async IIFE to handle async operation
+                                  (async () => {
+                                    try {
+                                      // Refresh personal info data
+                                      const updatedData = await portfolioService.getSectionData(
+                                        "personalInfo"
+                                      );
+                                      if (updatedData) {
+                                        setPersonalInfo(updatedData);
+                                      }
 
-                                  // Show success notification
-                                  showNotification(
-                                    "Profile image removed successfully!",
-                                    "success"
-                                  );
+                                      // Show success notification
+                                      showNotification(
+                                        "Profile image removed successfully!",
+                                        "success"
+                                      );
+                                    } catch (error) {
+                                      console.error("Error fetching updated personal info:", error);
+                                      showNotification("Error updating profile data.", "error");
+                                    }
+                                  })();
                                 } else {
                                   showNotification(
                                     "Failed to remove profile image.",
@@ -1751,7 +2059,7 @@ const AdminDashboard = () => {
                       placeholder="e.g. Hello, I'm"
                       value={personalInfo.hero?.greeting || "Hello, I'm"}
                       onChange={(e) =>
-                        updatePersonalInfo("hero.greeting", e.target.value)
+                        updatePersonalInfo("hero.greeting", e.target.value, true) // Enable autoSave
                       }
                     />
                     <small className={styles["form-helper-text"]}>
@@ -1768,7 +2076,7 @@ const AdminDashboard = () => {
                       placeholder="Brief description for your hero section"
                       value={personalInfo.hero?.description || ""}
                       onChange={(e) =>
-                        updatePersonalInfo("hero.description", e.target.value)
+                        updatePersonalInfo("hero.description", e.target.value, true) // Enable autoSave
                       }
                     ></textarea>
                     <small className={styles["form-helper-text"]}>
@@ -1785,7 +2093,7 @@ const AdminDashboard = () => {
                       placeholder="e.g. Get In Touch"
                       value={personalInfo.hero?.buttonText || "Get In Touch"}
                       onChange={(e) =>
-                        updatePersonalInfo("hero.buttonText", e.target.value)
+                        updatePersonalInfo("hero.buttonText", e.target.value, true) // Enable autoSave
                       }
                     />
                     <small className={styles["form-helper-text"]}>
@@ -1818,7 +2126,7 @@ const AdminDashboard = () => {
                               ...updatedStats[index],
                               value: e.target.value,
                             };
-                            updatePersonalInfo("hero.stats", updatedStats);
+                            updatePersonalInfo("hero.stats", updatedStats, true); // Enable autoSave
                           }}
                         />
                       </div>
@@ -1838,7 +2146,7 @@ const AdminDashboard = () => {
                               ...updatedStats[index],
                               label: e.target.value,
                             };
-                            updatePersonalInfo("hero.stats", updatedStats);
+                            updatePersonalInfo("hero.stats", updatedStats, true); // Enable autoSave
                           }}
                         />
                       </div>
@@ -1849,7 +2157,7 @@ const AdminDashboard = () => {
                             const updatedStats = (
                               personalInfo.hero?.stats || []
                             ).filter((_, i) => i !== index);
-                            updatePersonalInfo("hero.stats", updatedStats);
+                            updatePersonalInfo("hero.stats", updatedStats, true); // Enable autoSave
                           }}
                           disabled={
                             (personalInfo.hero?.stats || []).length <= 1
@@ -1870,7 +2178,7 @@ const AdminDashboard = () => {
                           ...(personalInfo.hero?.stats || []),
                           { value: "", label: "" },
                         ];
-                        updatePersonalInfo("hero.stats", updatedStats);
+                        updatePersonalInfo("hero.stats", updatedStats, true); // Enable autoSave
                       }}
                     >
                       <i className="fas fa-plus"></i> Add Stat
@@ -1912,13 +2220,32 @@ const AdminDashboard = () => {
                               const reader = new FileReader();
                               reader.onload = (event) => {
                                 if (typeof event.target?.result === "string") {
-                                  updatePersonalInfo(
-                                    "aboutImageUrl",
-                                    event.target.result
-                                  );
-                                  showNotification(
-                                    "About image updated successfully!"
-                                  );
+                                  // Create an async function to handle the image update
+                                  (async () => {
+                                    try {
+                                      // First update the state directly for immediate UI feedback
+                                      updatePersonalInfo(
+                                        "aboutImageUrl",
+                                        event.target.result
+                                      );
+                                      
+                                      // Then save the updated personalInfo to ensure it's stored
+                                      await portfolioService.saveSectionData("personalInfo", {
+                                        ...personalInfo,
+                                        aboutImageUrl: event.target.result
+                                      });
+                                      
+                                      showNotification(
+                                        "About image updated successfully!"
+                                      );
+                                    } catch (error) {
+                                      console.error("Error saving about image:", error);
+                                      showNotification(
+                                        "Error saving about image: " + error.message,
+                                        "error"
+                                      );
+                                    }
+                                  })();
                                 }
                               };
                               reader.readAsDataURL(file);
@@ -1934,9 +2261,31 @@ const AdminDashboard = () => {
                         {personalInfo.aboutImageUrl && (
                           <button
                             className={`${styles["action-btn"]} ${styles["delete"]}`}
-                            onClick={() =>
-                              updatePersonalInfo("aboutImageUrl", null)
-                            }
+                            onClick={() => {
+                              // Create an async function to handle the image removal
+                              (async () => {
+                                try {
+                                  // First update the state directly for immediate UI feedback
+                                  updatePersonalInfo("aboutImageUrl", null);
+                                  
+                                  // Then save the updated personalInfo to ensure it's stored
+                                  await portfolioService.saveSectionData("personalInfo", {
+                                    ...personalInfo,
+                                    aboutImageUrl: null
+                                  });
+                                  
+                                  showNotification(
+                                    "About image removed successfully!"
+                                  );
+                                } catch (error) {
+                                  console.error("Error removing about image:", error);
+                                  showNotification(
+                                    "Error removing about image: " + error.message,
+                                    "error"
+                                  );
+                                }
+                              })();
+                            }}
                           >
                             <i className="fas fa-trash-alt"></i> Remove
                           </button>
@@ -3803,34 +4152,39 @@ const AdminDashboard = () => {
                         <input
                           type="checkbox"
                           checked={cloudSyncEnabled}
-                          onChange={(e) => {
-                            const newValue = e.target.checked;
-                            setCloudSyncEnabled(newValue);
-                            portfolioService.toggleCloudSync(newValue)
-                              .then(success => {
-                                if (success) {
-                                  showNotification(
-                                    `Cloud sync ${newValue ? 'enabled' : 'disabled'} successfully`,
-                                    "success"
-                                  );
-                                } else {
-                                  // If toggle failed, revert back
-                                  setCloudSyncEnabled(!newValue);
-                                  showNotification(
-                                    `Failed to ${newValue ? 'enable' : 'disable'} cloud sync`,
-                                    "error"
-                                  );
-                                }
-                              })
-                              .catch(error => {
-                                console.error("Error toggling cloud sync:", error);
+                          onChange={async (e) => {
+                            try {
+                              const newValue = e.target.checked;
+                              setCloudSyncEnabled(newValue); // Optimistically update UI
+                              
+                              if (typeof portfolioService.toggleCloudSync !== 'function') {
+                                throw new Error("Cloud sync function not available");
+                              }
+                              
+                              const success = await portfolioService.toggleCloudSync(newValue);
+                              
+                              if (success) {
+                                showNotification(
+                                  `Cloud sync ${newValue ? 'enabled' : 'disabled'} successfully`,
+                                  "success"
+                                );
+                              } else {
                                 // If toggle failed, revert back
                                 setCloudSyncEnabled(!newValue);
                                 showNotification(
-                                  `Error toggling cloud sync: ${error.message}`,
+                                  `Failed to ${newValue ? 'enable' : 'disable'} cloud sync`,
                                   "error"
                                 );
-                              });
+                              }
+                            } catch (error) {
+                              console.error("Error toggling cloud sync:", error);
+                              // Revert UI state
+                              setCloudSyncEnabled(!e.target.checked);
+                              showNotification(
+                                `Error toggling cloud sync: ${error.message}`,
+                                "error"
+                              );
+                            }
                           }}
                         />
                         <span className={styles["slider"]}></span>
@@ -3844,53 +4198,68 @@ const AdminDashboard = () => {
                       <div className={styles["sync-actions"]}>
                         <button 
                           className={`${styles["action-btn"]} ${styles["sync"]}`}
-                          onClick={() => {
-                            showNotification("Syncing with cloud...", "info");
-                            portfolioService.syncLocalToCloud()
-                              .then(success => {
-                                if (success) {
-                                  showNotification("Successfully synced to cloud", "success");
-                                } else {
-                                  showNotification("Failed to sync to cloud", "error");
-                                }
-                              })
-                              .catch(error => {
-                                console.error("Error syncing to cloud:", error);
-                                showNotification(`Error syncing: ${error.message}`, "error");
-                              });
+                          onClick={async () => {
+                            try {
+                              showNotification("Syncing with cloud...", "info");
+                              
+                              if (typeof portfolioService.syncLocalToCloud !== 'function') {
+                                throw new Error("Cloud sync function not available");
+                              }
+                              
+                              const success = await portfolioService.syncLocalToCloud();
+                              
+                              if (success) {
+                                showNotification("Successfully synced to cloud", "success");
+                              } else {
+                                showNotification("Failed to sync to cloud", "error");
+                              }
+                            } catch (error) {
+                              console.error("Error syncing to cloud:", error);
+                              showNotification(`Error syncing: ${error.message}`, "error");
+                            }
                           }}
                         >
                           <i className="fas fa-cloud-upload-alt"></i> Push to Cloud
                         </button>
                         <button 
                           className={`${styles["action-btn"]} ${styles["sync"]}`}
-                          onClick={() => {
-                            showNotification("Pulling from cloud...", "info");
-                            portfolioService.syncCloudToLocal()
-                              .then(success => {
-                                if (success) {
-                                  showNotification("Successfully pulled from cloud", "success");
-                                  // Refresh UI with new data
-                                  const data = portfolioService.getAllData();
-                                  data.then(allData => {
-                                    setPersonalInfo(allData.personalInfo);
-                                    setEducationEntries(allData.education);
-                                    setExperienceEntries(allData.experience);
-                                    setSkillsData(allData.skills);
-                                    setHighlightEntries(allData.highlights);
-                                    setProjectEntries(allData.projects);
-                                    setPictureEntries(allData.pictures);
-                                    setReferenceEntries(allData.references);
-                                    setSettingsData(allData.settings);
-                                  });
-                                } else {
-                                  showNotification("Failed to pull from cloud", "error");
+                          onClick={async () => {
+                            try {
+                              showNotification("Pulling from cloud...", "info");
+                              
+                              if (typeof portfolioService.syncCloudToLocal !== 'function') {
+                                throw new Error("Cloud sync function not available");
+                              }
+                              
+                              const success = await portfolioService.syncCloudToLocal();
+                              
+                              if (success) {
+                                showNotification("Successfully pulled from cloud", "success");
+                                // Refresh UI with new data
+                                try {
+                                  const allData = await portfolioService.getAllData();
+                                  if (allData) {
+                                    // Safely set data with fallbacks
+                                    setPersonalInfo(allData.personalInfo || {});
+                                    setEducationEntries(Array.isArray(allData.education) ? allData.education : []);
+                                    setExperienceEntries(Array.isArray(allData.experience) ? allData.experience : []);
+                                    setSkillsData(allData.skills || { technical: [], soft: [], languages: [] });
+                                    setHighlightEntries(Array.isArray(allData.highlights) ? allData.highlights : []);
+                                    setProjectEntries(Array.isArray(allData.projects) ? allData.projects : []);
+                                    setPictureEntries(Array.isArray(allData.pictures) ? allData.pictures : []);
+                                    setReferenceEntries(Array.isArray(allData.references) ? allData.references : []);
+                                    setSettingsData(allData.settings || {});
+                                  }
+                                } catch (dataError) {
+                                  console.error("Error refreshing data after cloud pull:", dataError);
                                 }
-                              })
-                              .catch(error => {
-                                console.error("Error pulling from cloud:", error);
-                                showNotification(`Error pulling: ${error.message}`, "error");
-                              });
+                              } else {
+                                showNotification("Failed to pull from cloud", "error");
+                              }
+                            } catch (error) {
+                              console.error("Error pulling from cloud:", error);
+                              showNotification(`Error pulling: ${error.message}`, "error");
+                            }
                           }}
                         >
                           <i className="fas fa-cloud-download-alt"></i> Pull from Cloud

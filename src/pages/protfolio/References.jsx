@@ -22,13 +22,14 @@ const References = () => {
     }));
   };
   
-  // Fallback images for demo purposes
+  // Fallback images for demo purposes - Check if imports are available
   const fallbackImages = [
-    managerImage,
-    professorImage,
-    jenniferImage,
-    donaldImage
-  ];
+    placeholderImage, // Always use placeholder as first fallback
+    ...(managerImage ? [managerImage] : []),
+    ...(professorImage ? [professorImage] : []),
+    ...(jenniferImage ? [jenniferImage] : []),
+    ...(donaldImage ? [donaldImage] : [])
+  ].filter(Boolean); // Filter out any undefined values
   
   useEffect(() => {
     // Initialize localStorage if needed
@@ -36,9 +37,30 @@ const References = () => {
     
     // Fetch references data from localStorage
     const fetchData = () => {
-      const data = portfolioService.getSectionData('references');
-      setReferencesData(data || []);
-      console.log("References data loaded:", data);
+      const dataPromise = portfolioService.getSectionData('references');
+      // Handle async data properly
+      if (dataPromise && dataPromise.then) {
+        dataPromise.then(data => {
+          if (Array.isArray(data)) {
+            setReferencesData(data);
+            console.log("References data loaded:", data);
+          } else {
+            setReferencesData([]);
+            console.log("No references data found or invalid format");
+          }
+        }).catch(err => {
+          console.error("Error loading references data:", err);
+          setReferencesData([]);
+        });
+      } else if (Array.isArray(dataPromise)) {
+        // Handle case where it might return data directly
+        setReferencesData(dataPromise);
+        console.log("References data loaded (direct):", dataPromise);
+      } else {
+        // Fallback to empty array
+        setReferencesData([]);
+        console.log("No references data or invalid format");
+      }
     };
     
     // Initial data fetch
@@ -101,8 +123,23 @@ const References = () => {
   // Manually force an update to the component when localStorage is changed from this window
   useEffect(() => {
     const handleLocalChange = () => {
-      const data = portfolioService.getSectionData('references');
-      setReferencesData(data || []);
+      const dataPromise = portfolioService.getSectionData('references');
+      // Handle async data properly
+      if (dataPromise && dataPromise.then) {
+        dataPromise.then(data => {
+          if (Array.isArray(data)) {
+            setReferencesData(data);
+          } else {
+            setReferencesData([]);
+          }
+        }).catch(() => {
+          setReferencesData([]);
+        });
+      } else if (Array.isArray(dataPromise)) {
+        setReferencesData(dataPromise);
+      } else {
+        setReferencesData([]);
+      }
     };
     
     window.addEventListener('localDataChanged', handleLocalChange);
@@ -135,7 +172,7 @@ const References = () => {
             >
               <div className={styles.referenceImage}>
                 <img 
-                  src={imageSources[reference.name] || reference.image || fallbackImages[index % fallbackImages.length]} 
+                  src={imageSources[reference.name] || reference.image || (fallbackImages.length > 0 ? fallbackImages[index % fallbackImages.length] : placeholderImage)} 
                   alt={reference.name}
                   onError={() => handleImageError(reference.name)}
                 />

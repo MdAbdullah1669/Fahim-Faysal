@@ -12,9 +12,31 @@ const Education = () => {
     
     // Fetch education data from localStorage
     const fetchData = () => {
-      const data = portfolioService.getSectionData('education');
-      setEducationData(data || []);
-      console.log("Education data loaded:", data);
+      const dataPromise = portfolioService.getSectionData('education');
+      
+      // Handle async data properly
+      if (dataPromise && dataPromise.then) {
+        dataPromise.then(data => {
+          if (Array.isArray(data)) {
+            setEducationData(data);
+            console.log("Education data loaded:", data);
+          } else {
+            setEducationData([]);
+            console.log("No education data found or invalid format");
+          }
+        }).catch(err => {
+          console.error("Error loading education data:", err);
+          setEducationData([]);
+        });
+      } else if (Array.isArray(dataPromise)) {
+        // Handle case where it might return data directly
+        setEducationData(dataPromise);
+        console.log("Education data loaded (direct):", dataPromise);
+      } else {
+        // Fallback to empty array
+        setEducationData([]);
+        console.log("No education data or invalid format");
+      }
     };
     
     // Initial data fetch
@@ -77,8 +99,24 @@ const Education = () => {
   // Manually force an update to the component when localStorage is changed from this window
   useEffect(() => {
     const handleLocalChange = () => {
-      const data = portfolioService.getSectionData('education');
-      setEducationData(data || []);
+      const dataPromise = portfolioService.getSectionData('education');
+      
+      // Handle async data properly
+      if (dataPromise && dataPromise.then) {
+        dataPromise.then(data => {
+          if (Array.isArray(data)) {
+            setEducationData(data);
+          } else {
+            setEducationData([]);
+          }
+        }).catch(() => {
+          setEducationData([]);
+        });
+      } else if (Array.isArray(dataPromise)) {
+        setEducationData(dataPromise);
+      } else {
+        setEducationData([]);
+      }
     };
     
     window.addEventListener('localDataChanged', handleLocalChange);
@@ -101,7 +139,7 @@ const Education = () => {
   };
   
   // Check if we have education data
-  if (educationData.length === 0) {
+  if (!educationData || educationData.length === 0) {
     return null; // Don't render the section if no data
   }
   
@@ -112,23 +150,25 @@ const Education = () => {
         
         <div className={styles.educationGrid}>
           {educationData.map((edu, index) => (
-            <div 
-              key={index} 
-              className={`${styles.eduItem} ${styles.glassCard}`}
-              ref={el => educationItems.current[index] = el}
-            >
-              <h3>{edu.degree}</h3>
-              <h4>{edu.institution}</h4>
-              <h5>
-                {edu.location} | {
-                  edu.current 
-                    ? 'Current' 
-                    : `${formatDate(edu.startDate)}${edu.endDate ? ` - ${formatDate(edu.endDate)}` : ''}`
-                }
-              </h5>
-              <p>{edu.description}</p>
-            </div>
-          ))}
+            edu && (
+              <div 
+                key={index} 
+                className={`${styles.eduItem} ${styles.glassCard}`}
+                ref={el => educationItems.current[index] = el}
+              >
+                <h3>{edu.degree || 'Degree'}</h3>
+                <h4>{edu.institution || 'Institution'}</h4>
+                <h5>
+                  {edu.location || 'Location'} | {
+                    edu.current 
+                      ? 'Current' 
+                      : `${formatDate(edu.startDate)}${edu.endDate ? ` - ${formatDate(edu.endDate)}` : ''}`
+                  }
+                </h5>
+                <p>{edu.description || ''}</p>
+              </div>
+            )
+          )).filter(Boolean)}
         </div>
       </div>
     </section>

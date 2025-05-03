@@ -371,67 +371,79 @@ const validateAllLinks = () => {
 const initializeStorage = async () => {
   console.log("Initializing storage and checking for existing data...");
 
-  // First, initialize cloud sync
-  await cloudSyncService.initCloudSync();
-
-  // Check if we're in production environment (Netlify)
-  const isProduction = window.location.hostname !== "localhost" && window.location.hostname !== "127.0.0.1";
-  
-  // Check if we've already loaded production data
-  const productionDataLoaded = localStorage.getItem(PRODUCTION_DATA_LOADED);
-  
-  // If in production and production data hasn't been loaded yet, initialize with production data
-  if (isProduction && !productionDataLoaded) {
-    console.log("Production environment detected. Loading production data...");
+  try {
+    // First, initialize cloud sync with timeout protection
+    const cloudSyncPromise = cloudSyncService.initCloudSync();
+    const timeoutPromise = new Promise((_, reject) => {
+      setTimeout(() => reject(new Error('Cloud sync initialization timed out')), 5000);
+    });
     
     try {
-      // Load production data if available (from window object)
-      if (window.PORTFOLIO_PRODUCTION_DATA) {
-        const productionData = window.PORTFOLIO_PRODUCTION_DATA;
-        
-        // Save all sections from production data
-        if (productionData.personalInfo) saveToStorage(KEYS.PERSONAL_INFO, productionData.personalInfo);
-        if (productionData.education) saveToStorage(KEYS.EDUCATION, productionData.education);
-        if (productionData.experience) saveToStorage(KEYS.EXPERIENCE, productionData.experience);
-        if (productionData.skills) saveToStorage(KEYS.SKILLS, productionData.skills);
-        if (productionData.projects) saveToStorage(KEYS.PROJECTS, productionData.projects);
-        if (productionData.highlights) saveToStorage(KEYS.HIGHLIGHTS, productionData.highlights);
-        if (productionData.pictures) saveToStorage(KEYS.PICTURES, productionData.pictures);
-        if (productionData.references) saveToStorage(KEYS.REFERENCES, productionData.references);
-        if (productionData.settings) saveToStorage(KEYS.SETTINGS, productionData.settings);
-        
-        // Mark that we've loaded production data
-        localStorage.setItem(PRODUCTION_DATA_LOADED, "true");
-        console.log("Production data loaded successfully");
-        
-        // If cloud sync is enabled, initialize cloud data as well
-        if (cloudSyncService.isSyncEnabled()) {
-          cloudSyncService.initializeCloudData(productionData)
-            .then(success => {
+      await Promise.race([cloudSyncPromise, timeoutPromise]);
+    } catch (syncError) {
+      console.error("Error initializing cloud sync with timeout:", syncError);
+      // Continue with local data even if cloud sync fails
+    }
+    
+    // Check if we're in production environment (Netlify)
+    const isProduction = window.location.hostname !== "localhost" && window.location.hostname !== "127.0.0.1";
+    
+    // Check if we've already loaded production data
+    const productionDataLoaded = localStorage.getItem(PRODUCTION_DATA_LOADED);
+    
+    // Use potential preloaded cloud data if available (from index.html script)
+    const hasPreloadedCloudData = window.CLOUD_PORTFOLIO_DATA && 
+                              typeof window.CLOUD_PORTFOLIO_DATA === 'object' && 
+                              Object.keys(window.CLOUD_PORTFOLIO_DATA).length > 0;
+    
+    // If in production and production data hasn't been loaded yet, initialize with production data
+    if (isProduction && !productionDataLoaded) {
+      console.log("Production environment detected. Loading production data...");
+      
+      try {
+        // Load production data if available (from window object)
+        if (window.PORTFOLIO_PRODUCTION_DATA) {
+          const productionData = window.PORTFOLIO_PRODUCTION_DATA;
+          
+          // Save all sections from production data
+          if (productionData.personalInfo) saveToStorage(KEYS.PERSONAL_INFO, productionData.personalInfo);
+          if (productionData.education) saveToStorage(KEYS.EDUCATION, productionData.education);
+          if (productionData.experience) saveToStorage(KEYS.EXPERIENCE, productionData.experience);
+          if (productionData.skills) saveToStorage(KEYS.SKILLS, productionData.skills);
+          if (productionData.projects) saveToStorage(KEYS.PROJECTS, productionData.projects);
+          if (productionData.highlights) saveToStorage(KEYS.HIGHLIGHTS, productionData.highlights);
+          if (productionData.pictures) saveToStorage(KEYS.PICTURES, productionData.pictures);
+          if (productionData.references) saveToStorage(KEYS.REFERENCES, productionData.references);
+          if (productionData.settings) saveToStorage(KEYS.SETTINGS, productionData.settings);
+          
+          // Mark that we've loaded production data
+          localStorage.setItem(PRODUCTION_DATA_LOADED, "true");
+          console.log("Production data loaded successfully");
+          
+          // If cloud sync is enabled, initialize cloud data as well
+          if (cloudSyncService.isSyncEnabled()) {
+            try {
+              const success = await cloudSyncService.initializeCloudData(productionData);
               if (success) {
                 console.log("Initialized cloud data with production data");
               } else {
-                console.error("Failed to initialize cloud data");
+                console.warn("Failed to initialize cloud data");
               }
-            })
-            .catch(error => {
+            } catch (error) {
               console.error("Error initializing cloud data:", error);
-            });
+            }
+          }
+          
+          return;
         }
-        
-        return;
+      } catch (error) {
+        console.error("Error loading production data:", error);
       }
-    } catch (error) {
-      console.error("Error loading production data:", error);
-    }
-  } else if (cloudSyncService.isSyncEnabled()) {
-    // If cloud sync is enabled, try to load data from cloud
-    try {
-      console.log("Cloud sync enabled. Attempting to load data from cloud...");
-      const cloudData = await cloudSyncService.getAllFromCloud();
-      
-      if (cloudData && Object.keys(cloudData).length > 0) {
-        console.log("Successfully loaded data from cloud");
+    } else if (hasPreloadedCloudData && cloudSyncService.isSyncEnabled()) {
+      // If we have preloaded cloud data from index.html script, use it
+      console.log("Using preloaded cloud data from initial page load");
+      try {
+        const cloudData = window.CLOUD_PORTFOLIO_DATA;
         
         // Store the cloud data locally
         if (cloudData.personalInfo) saveToStorage(KEYS.PERSONAL_INFO, cloudData.personalInfo);
@@ -444,28 +456,64 @@ const initializeStorage = async () => {
         if (cloudData.references) saveToStorage(KEYS.REFERENCES, cloudData.references);
         if (cloudData.settings) saveToStorage(KEYS.SETTINGS, cloudData.settings);
         
-        console.log("Cloud data synchronized to local storage");
+        console.log("Preloaded cloud data synchronized to local storage");
         return;
-      } else {
-        console.log("No data found in cloud storage. Using local data.");
+      } catch (error) {
+        console.error("Error using preloaded cloud data:", error);
+      }
+    } else if (cloudSyncService.isSyncEnabled()) {
+      // If cloud sync is enabled, try to load data from cloud
+      try {
+        console.log("Cloud sync enabled. Attempting to load data from cloud...");
         
-        // Initialize cloud with local data
-        const localData = await getAllData();
-        cloudSyncService.initializeCloudData(localData)
-          .then(success => {
+        // Set a timeout for cloud data loading
+        const cloudDataPromise = cloudSyncService.getAllFromCloud();
+        const cloudTimeoutPromise = new Promise((_, reject) => {
+          setTimeout(() => reject(new Error('Cloud data fetch timed out')), 5000);
+        });
+        
+        const cloudData = await Promise.race([cloudDataPromise, cloudTimeoutPromise]);
+        
+        if (cloudData && Object.keys(cloudData).length > 0) {
+          console.log("Successfully loaded data from cloud");
+          
+          // Store the cloud data locally
+          if (cloudData.personalInfo) saveToStorage(KEYS.PERSONAL_INFO, cloudData.personalInfo);
+          if (cloudData.education) saveToStorage(KEYS.EDUCATION, cloudData.education);
+          if (cloudData.experience) saveToStorage(KEYS.EXPERIENCE, cloudData.experience);
+          if (cloudData.skills) saveToStorage(KEYS.SKILLS, cloudData.skills);
+          if (cloudData.projects) saveToStorage(KEYS.PROJECTS, cloudData.projects);
+          if (cloudData.highlights) saveToStorage(KEYS.HIGHLIGHTS, cloudData.highlights);
+          if (cloudData.pictures) saveToStorage(KEYS.PICTURES, cloudData.pictures);
+          if (cloudData.references) saveToStorage(KEYS.REFERENCES, cloudData.references);
+          if (cloudData.settings) saveToStorage(KEYS.SETTINGS, cloudData.settings);
+          
+          console.log("Cloud data synchronized to local storage");
+          return;
+        } else {
+          console.log("No data found in cloud storage. Using local data.");
+          
+          // Initialize cloud with local data
+          try {
+            const localData = await getAllData();
+            const success = await cloudSyncService.initializeCloudData(localData);
             if (success) {
               console.log("Initialized cloud data with local data");
             } else {
-              console.error("Failed to initialize cloud data with local data");
+              console.warn("Failed to initialize cloud data with local data");
             }
-          })
-          .catch(error => {
+          } catch (error) {
             console.error("Error initializing cloud data:", error);
-          });
+          }
+        }
+      } catch (error) {
+        console.error("Error loading data from cloud:", error);
+        console.log("Continuing with local data initialization...");
       }
-    } catch (error) {
-      console.error("Error loading data from cloud:", error);
     }
+  } catch (error) {
+    console.error("Critical error during storage initialization:", error);
+    // Continue with local data initialization even if there was an error
   }
 
   // Validate all existing links
@@ -612,28 +660,74 @@ const initializeStorage = async () => {
   console.log("Storage initialization complete");
 };
 
-// Get all portfolio data
+// Get all portfolio data with robust error handling
 const getAllData = async () => {
-  if (cloudSyncService.isSyncEnabled()) {
-    // Try to get data from cloud first
-    const cloudData = await cloudSyncService.getAllFromCloud();
-    if (cloudData && Object.keys(cloudData).length > 0) {
-      return cloudData;
+  try {
+    // Safely check if cloud sync is enabled
+    let cloudSyncIsEnabled = false;
+    try {
+      if (typeof cloudSyncService === 'object' && 
+          typeof cloudSyncService.isSyncEnabled === 'function') {
+        cloudSyncIsEnabled = cloudSyncService.isSyncEnabled();
+      }
+    } catch (syncError) {
+      console.error("Error checking cloud sync status:", syncError);
+      cloudSyncIsEnabled = false;
     }
-  }
   
-  // Fall back to local storage
-  return {
-    personalInfo: await getFromStorage(KEYS.PERSONAL_INFO, defaultData.personalInfo),
-    education: await getFromStorage(KEYS.EDUCATION, defaultData.education),
-    experience: await getFromStorage(KEYS.EXPERIENCE, defaultData.experience),
-    skills: await getFromStorage(KEYS.SKILLS, defaultData.skills),
-    projects: await getFromStorage(KEYS.PROJECTS, defaultData.projects),
-    highlights: await getFromStorage(KEYS.HIGHLIGHTS, defaultData.highlights),
-    pictures: await getFromStorage(KEYS.PICTURES, defaultData.pictures),
-    references: await getFromStorage(KEYS.REFERENCES, defaultData.references),
-    settings: await getFromStorage(KEYS.SETTINGS, defaultData.settings),
-  };
+    // Try to get data from cloud if sync is enabled
+    if (cloudSyncIsEnabled) {
+      try {
+        const cloudData = await cloudSyncService.getAllFromCloud();
+        if (cloudData && Object.keys(cloudData).length > 0) {
+          return cloudData;
+        }
+      } catch (cloudError) {
+        console.error("Error fetching data from cloud:", cloudError);
+        // Continue to local storage fallback
+      }
+    }
+    
+    // Fall back to local storage with extra safety
+    const result = {};
+    
+    // Helper to safely get data from storage
+    const safeGetFromStorage = async (key, defaultVal) => {
+      try {
+        return await getFromStorage(key, defaultVal);
+      } catch (error) {
+        console.error(`Error getting ${key} from storage:`, error);
+        return defaultVal;
+      }
+    };
+    
+    // Get all sections with safety
+    result.personalInfo = await safeGetFromStorage(KEYS.PERSONAL_INFO, defaultData.personalInfo);
+    result.education = await safeGetFromStorage(KEYS.EDUCATION, defaultData.education);
+    result.experience = await safeGetFromStorage(KEYS.EXPERIENCE, defaultData.experience);
+    result.skills = await safeGetFromStorage(KEYS.SKILLS, defaultData.skills);
+    result.projects = await safeGetFromStorage(KEYS.PROJECTS, defaultData.projects);
+    result.highlights = await safeGetFromStorage(KEYS.HIGHLIGHTS, defaultData.highlights);
+    result.pictures = await safeGetFromStorage(KEYS.PICTURES, defaultData.pictures);
+    result.references = await safeGetFromStorage(KEYS.REFERENCES, defaultData.references);
+    result.settings = await safeGetFromStorage(KEYS.SETTINGS, defaultData.settings);
+    
+    return result;
+  } catch (error) {
+    console.error("Critical error in getAllData:", error);
+    // Return default data as a last resort
+    return {
+      personalInfo: defaultData.personalInfo,
+      education: defaultData.education,
+      experience: defaultData.experience,
+      skills: defaultData.skills,
+      projects: defaultData.projects,
+      highlights: defaultData.highlights,
+      pictures: defaultData.pictures,
+      references: defaultData.references,
+      settings: defaultData.settings,
+    };
+  }
 };
 
 // Get section data
@@ -877,79 +971,163 @@ const fixHeroImageData = (imageUrl) => {
   }
 };
 
-// Helper function to check if cloud sync is enabled
+// Check if cloud sync is enabled with proper error handling
 const isCloudSyncEnabled = () => {
-  return cloudSyncService.isSyncEnabled();
+  try {
+    if (typeof cloudSyncService === 'object' && 
+        typeof cloudSyncService.isSyncEnabled === 'function') {
+      return cloudSyncService.isSyncEnabled();
+    }
+    return false;
+  } catch (error) {
+    console.error("Error checking cloud sync status:", error);
+    return false;
+  }
 };
 
-// Helper function to toggle cloud sync
+// Toggle cloud sync with error handling
 const toggleCloudSync = async (enabled) => {
-  const success = await cloudSyncService.toggleSyncEnabled(enabled);
-  
-  if (success && enabled) {
-    // Initialize cloud data with current local data
-    const allData = {
-      personalInfo: await getFromStorage(KEYS.PERSONAL_INFO, defaultData.personalInfo),
-      education: await getFromStorage(KEYS.EDUCATION, defaultData.education),
-      experience: await getFromStorage(KEYS.EXPERIENCE, defaultData.experience),
-      skills: await getFromStorage(KEYS.SKILLS, defaultData.skills),
-      projects: await getFromStorage(KEYS.PROJECTS, defaultData.projects),
-      highlights: await getFromStorage(KEYS.HIGHLIGHTS, defaultData.highlights),
-      pictures: await getFromStorage(KEYS.PICTURES, defaultData.pictures),
-      references: await getFromStorage(KEYS.REFERENCES, defaultData.references),
-      settings: await getFromStorage(KEYS.SETTINGS, defaultData.settings)
+  try {
+    if (typeof cloudSyncService !== 'object' || 
+        typeof cloudSyncService.toggleSyncEnabled !== 'function') {
+      console.error("Cloud sync service not available");
+      return false;
+    }
+    
+    // Toggle sync in the cloud service
+    const success = await cloudSyncService.toggleSyncEnabled(enabled);
+    
+    if (success) {
+      // Save to local storage for persistent setting
+      try {
+        localStorage.setItem(CLOUD_SYNC_ENABLED, enabled.toString());
+      } catch (storageError) {
+        console.error("Error saving sync setting to storage:", storageError);
+      }
+      
+      return true;
+    }
+    
+    return false;
+  } catch (error) {
+    console.error("Error toggling cloud sync:", error);
+    return false;
+  }
+};
+
+// Sync local data to cloud with error handling
+const syncLocalToCloud = async () => {
+  try {
+    if (!isCloudSyncEnabled()) {
+      console.warn("Cannot sync to cloud: cloud sync is disabled");
+      return false;
+    }
+    
+    if (typeof cloudSyncService !== 'object' || 
+        typeof cloudSyncService.initializeCloudData !== 'function') {
+      console.error("Cloud sync service not available");
+      return false;
+    }
+    
+    // Get all data from local storage first
+    const allData = await getAllData();
+    
+    // Send to cloud
+    return await cloudSyncService.initializeCloudData(allData);
+  } catch (error) {
+    console.error("Error syncing local data to cloud:", error);
+    return false;
+  }
+};
+
+// Sync data from cloud to local with error handling
+const syncCloudToLocal = async () => {
+  try {
+    if (!isCloudSyncEnabled()) {
+      console.warn("Cannot sync from cloud: cloud sync is disabled");
+      return false;
+    }
+    
+    if (typeof cloudSyncService !== 'object' || 
+        typeof cloudSyncService.getAllFromCloud !== 'function') {
+      console.error("Cloud sync service not available");
+      return false;
+    }
+    
+    // Get data from cloud
+    const cloudData = await cloudSyncService.getAllFromCloud();
+    
+    if (!cloudData || Object.keys(cloudData).length === 0) {
+      console.warn("No data available from cloud");
+      return false;
+    }
+    
+    // Save all sections to local storage
+    let success = false;
+    
+    // Helper to safely save data
+    const safeSaveToStorage = async (key, data) => {
+      if (!data) return false;
+      try {
+        await saveToStorage(key, data);
+        return true;
+      } catch (error) {
+        console.error(`Error saving ${key} to storage:`, error);
+        return false;
+      }
     };
     
-    await cloudSyncService.initializeCloudData(allData);
-  }
-  
-  return success;
-};
-
-// Helper function to force sync from local to cloud
-const syncLocalToCloud = async () => {
-  if (!cloudSyncService.isSyncEnabled()) {
-    return false;
-  }
-  
-  const allData = {
-    personalInfo: await getFromStorage(KEYS.PERSONAL_INFO, defaultData.personalInfo),
-    education: await getFromStorage(KEYS.EDUCATION, defaultData.education),
-    experience: await getFromStorage(KEYS.EXPERIENCE, defaultData.experience),
-    skills: await getFromStorage(KEYS.SKILLS, defaultData.skills),
-    projects: await getFromStorage(KEYS.PROJECTS, defaultData.projects),
-    highlights: await getFromStorage(KEYS.HIGHLIGHTS, defaultData.highlights),
-    pictures: await getFromStorage(KEYS.PICTURES, defaultData.pictures),
-    references: await getFromStorage(KEYS.REFERENCES, defaultData.references),
-    settings: await getFromStorage(KEYS.SETTINGS, defaultData.settings)
-  };
-  
-  return await cloudSyncService.initializeCloudData(allData);
-};
-
-// Helper function to force sync from cloud to local
-const syncCloudToLocal = async () => {
-  if (!cloudSyncService.isSyncEnabled()) {
-    return false;
-  }
-  
-  const cloudData = await cloudSyncService.getAllFromCloud();
-  
-  if (cloudData && Object.keys(cloudData).length > 0) {
-    if (cloudData.personalInfo) saveToStorage(KEYS.PERSONAL_INFO, cloudData.personalInfo);
-    if (cloudData.education) saveToStorage(KEYS.EDUCATION, cloudData.education);
-    if (cloudData.experience) saveToStorage(KEYS.EXPERIENCE, cloudData.experience);
-    if (cloudData.skills) saveToStorage(KEYS.SKILLS, cloudData.skills);
-    if (cloudData.projects) saveToStorage(KEYS.PROJECTS, cloudData.projects);
-    if (cloudData.highlights) saveToStorage(KEYS.HIGHLIGHTS, cloudData.highlights);
-    if (cloudData.pictures) saveToStorage(KEYS.PICTURES, cloudData.pictures);
-    if (cloudData.references) saveToStorage(KEYS.REFERENCES, cloudData.references);
-    if (cloudData.settings) saveToStorage(KEYS.SETTINGS, cloudData.settings);
+    // Process each section
+    if (cloudData.personalInfo) {
+      success = await safeSaveToStorage(KEYS.PERSONAL_INFO, cloudData.personalInfo) || success;
+    }
     
-    return true;
+    if (cloudData.education) {
+      success = await safeSaveToStorage(KEYS.EDUCATION, cloudData.education) || success;
+    }
+    
+    if (cloudData.experience) {
+      success = await safeSaveToStorage(KEYS.EXPERIENCE, cloudData.experience) || success;
+    }
+    
+    if (cloudData.skills) {
+      success = await safeSaveToStorage(KEYS.SKILLS, cloudData.skills) || success;
+    }
+    
+    if (cloudData.projects) {
+      success = await safeSaveToStorage(KEYS.PROJECTS, cloudData.projects) || success;
+    }
+    
+    if (cloudData.highlights) {
+      success = await safeSaveToStorage(KEYS.HIGHLIGHTS, cloudData.highlights) || success;
+    }
+    
+    if (cloudData.pictures) {
+      success = await safeSaveToStorage(KEYS.PICTURES, cloudData.pictures) || success;
+    }
+    
+    if (cloudData.references) {
+      success = await safeSaveToStorage(KEYS.REFERENCES, cloudData.references) || success;
+    }
+    
+    if (cloudData.settings) {
+      success = await safeSaveToStorage(KEYS.SETTINGS, cloudData.settings) || success;
+    }
+    
+    // Dispatch event to notify components of data change
+    if (success) {
+      try {
+        dispatchLocalDataChanged();
+      } catch (eventError) {
+        console.error("Error dispatching data change event:", eventError);
+      }
+    }
+    
+    return success;
+  } catch (error) {
+    console.error("Error syncing cloud data to local:", error);
+    return false;
   }
-  
-  return false;
 };
 
 // Export all functions
