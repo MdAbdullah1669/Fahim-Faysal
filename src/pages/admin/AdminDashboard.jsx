@@ -230,6 +230,9 @@ const AdminDashboard = () => {
   // State for password change error
   const [passwordError, setPasswordError] = useState("");
 
+  // State for cloud sync
+  const [cloudSyncEnabled, setCloudSyncEnabled] = useState(false);
+
   // Load settings data when section changes
   useEffect(() => {
     if (activeSection === "settings") {
@@ -248,6 +251,11 @@ const AdminDashboard = () => {
           metaDescription: "",
         }
       );
+      
+      // Check if cloud sync is enabled
+      portfolioService.isCloudSyncEnabled().then(enabled => {
+        setCloudSyncEnabled(enabled);
+      });
     }
   }, [activeSection]);
 
@@ -3782,6 +3790,124 @@ const AdminDashboard = () => {
                   <h3 className={styles["form-section-title"]}>
                     Data Management
                   </h3>
+                  
+                  <div className={styles["cloud-sync-section"]}>
+                    <h4>Real-Time Cloud Sync</h4>
+                    <p>
+                      Enable cloud synchronization to make your portfolio data available in real-time across all devices and on your live website.
+                      When enabled, changes you make here will be immediately visible on your live site.
+                    </p>
+                    
+                    <div className={styles["toggle-container"]}>
+                      <label className={styles["switch"]}>
+                        <input
+                          type="checkbox"
+                          checked={cloudSyncEnabled}
+                          onChange={(e) => {
+                            const newValue = e.target.checked;
+                            setCloudSyncEnabled(newValue);
+                            portfolioService.toggleCloudSync(newValue)
+                              .then(success => {
+                                if (success) {
+                                  showNotification(
+                                    `Cloud sync ${newValue ? 'enabled' : 'disabled'} successfully`,
+                                    "success"
+                                  );
+                                } else {
+                                  // If toggle failed, revert back
+                                  setCloudSyncEnabled(!newValue);
+                                  showNotification(
+                                    `Failed to ${newValue ? 'enable' : 'disable'} cloud sync`,
+                                    "error"
+                                  );
+                                }
+                              })
+                              .catch(error => {
+                                console.error("Error toggling cloud sync:", error);
+                                // If toggle failed, revert back
+                                setCloudSyncEnabled(!newValue);
+                                showNotification(
+                                  `Error toggling cloud sync: ${error.message}`,
+                                  "error"
+                                );
+                              });
+                          }}
+                        />
+                        <span className={styles["slider"]}></span>
+                      </label>
+                      <span className={styles["toggle-label"]}>
+                        {cloudSyncEnabled ? "Cloud Sync Enabled" : "Cloud Sync Disabled"}
+                      </span>
+                    </div>
+                    
+                    {cloudSyncEnabled && (
+                      <div className={styles["sync-actions"]}>
+                        <button 
+                          className={`${styles["action-btn"]} ${styles["sync"]}`}
+                          onClick={() => {
+                            showNotification("Syncing with cloud...", "info");
+                            portfolioService.syncLocalToCloud()
+                              .then(success => {
+                                if (success) {
+                                  showNotification("Successfully synced to cloud", "success");
+                                } else {
+                                  showNotification("Failed to sync to cloud", "error");
+                                }
+                              })
+                              .catch(error => {
+                                console.error("Error syncing to cloud:", error);
+                                showNotification(`Error syncing: ${error.message}`, "error");
+                              });
+                          }}
+                        >
+                          <i className="fas fa-cloud-upload-alt"></i> Push to Cloud
+                        </button>
+                        <button 
+                          className={`${styles["action-btn"]} ${styles["sync"]}`}
+                          onClick={() => {
+                            showNotification("Pulling from cloud...", "info");
+                            portfolioService.syncCloudToLocal()
+                              .then(success => {
+                                if (success) {
+                                  showNotification("Successfully pulled from cloud", "success");
+                                  // Refresh UI with new data
+                                  const data = portfolioService.getAllData();
+                                  data.then(allData => {
+                                    setPersonalInfo(allData.personalInfo);
+                                    setEducationEntries(allData.education);
+                                    setExperienceEntries(allData.experience);
+                                    setSkillsData(allData.skills);
+                                    setHighlightEntries(allData.highlights);
+                                    setProjectEntries(allData.projects);
+                                    setPictureEntries(allData.pictures);
+                                    setReferenceEntries(allData.references);
+                                    setSettingsData(allData.settings);
+                                  });
+                                } else {
+                                  showNotification("Failed to pull from cloud", "error");
+                                }
+                              })
+                              .catch(error => {
+                                console.error("Error pulling from cloud:", error);
+                                showNotification(`Error pulling: ${error.message}`, "error");
+                              });
+                          }}
+                        >
+                          <i className="fas fa-cloud-download-alt"></i> Pull from Cloud
+                        </button>
+                      </div>
+                    )}
+                    
+                    {cloudSyncEnabled ? (
+                      <p className={styles["sync-status-info"]}>
+                        <i className="fas fa-info-circle"></i> Your portfolio data is now synchronized across devices and with your live website.
+                      </p>
+                    ) : (
+                      <p className={styles["sync-status-info"]}>
+                        <i className="fas fa-info-circle"></i> Enable cloud sync to make real-time updates to your live website.
+                      </p>
+                    )}
+                  </div>
                   
                   <div className={styles["data-export-section"]}>
                     <p>Export your portfolio data to use in production deployment:</p>

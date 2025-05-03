@@ -11,6 +11,82 @@
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css">
     <!-- Production data for Netlify deployment -->
     <script src="/production-data.js"></script>
+    <!-- Cloud data loader -->
+    <script>
+      // Function to fetch and load cloud data before the React app loads
+      async function preloadCloudData() {
+        try {
+          // Check if cloud sync is enabled
+          const syncStatusResponse = await fetch('https://api.jsonbin.io/v3/b/65f67ac8266cfc3fde8e7cc7', {
+            method: 'GET',
+            headers: {
+              'X-Master-Key': '$2a$10$iYxZUCDpdRLqm2EGZbXBzeR2QJo9.cqEgdVxzl.IUVLygRp/YYGjm'
+            }
+          });
+          
+          if (!syncStatusResponse.ok) {
+            throw new Error(`Failed to fetch sync status: ${syncStatusResponse.status}`);
+          }
+          
+          const syncData = await syncStatusResponse.json();
+          const syncEnabled = syncData.record?.enabled || false;
+          
+          if (syncEnabled) {
+            // Create a global variable to store cloud data
+            window.CLOUD_PORTFOLIO_DATA = {};
+            
+            // Array of bin IDs for each section
+            const sections = [
+              { id: '65f67a5c266cfc3fde8e7c2c', name: 'personalInfo' },
+              { id: '65f67a6d266cfc3fde8e7c4c', name: 'education' },
+              { id: '65f67a7b266cfc3fde8e7c5c', name: 'experience' },
+              { id: '65f67a85266cfc3fde8e7c6c', name: 'skills' },
+              { id: '65f67a91266cfc3fde8e7c7c', name: 'projects' },
+              { id: '65f67a9c266cfc3fde8e7c8c', name: 'highlights' },
+              { id: '65f67aa7266cfc3fde8e7c9c', name: 'pictures' },
+              { id: '65f67ab2266cfc3fde8e7cac', name: 'references' },
+              { id: '65f67abd266cfc3fde8e7cbb', name: 'settings' }
+            ];
+            
+            // Fetch all sections in parallel
+            const promises = sections.map(async ({ id, name }) => {
+              try {
+                const response = await fetch(`https://api.jsonbin.io/v3/b/${id}`, {
+                  method: 'GET',
+                  headers: {
+                    'X-Master-Key': '$2a$10$iYxZUCDpdRLqm2EGZbXBzeR2QJo9.cqEgdVxzl.IUVLygRp/YYGjm'
+                  }
+                });
+                
+                if (response.ok) {
+                  const data = await response.json();
+                  return { name, data: data.record };
+                }
+                return null;
+              } catch (error) {
+                console.error(`Error fetching ${name}:`, error);
+                return null;
+              }
+            });
+            
+            // Process all the fetch results
+            const results = await Promise.all(promises);
+            results.forEach(result => {
+              if (result && result.data) {
+                window.CLOUD_PORTFOLIO_DATA[result.name] = result.data;
+              }
+            });
+            
+            console.log('Cloud data preloaded successfully');
+          }
+        } catch (error) {
+          console.error('Error preloading cloud data:', error);
+        }
+      }
+      
+      // Call the preload function
+      preloadCloudData();
+    </script>
   </head>
   <body>
     <div id="root"></div>
