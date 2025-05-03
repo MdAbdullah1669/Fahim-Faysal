@@ -92,7 +92,7 @@ const AdminLogin = () => {
       <div className={styles['login-container']}>
         <div className={styles['login-box']}>
           <div className={styles['login-header']}>
-            <h1>Fahim Faysal</h1>
+            <h1>Portfolio Manager</h1>
             <p>Sign in to manage your portfolio</p>
           </div>
           <form id="loginForm" className={styles['login-form']} onSubmit={handleSubmit}>

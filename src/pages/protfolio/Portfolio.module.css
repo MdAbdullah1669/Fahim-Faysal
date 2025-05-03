@@ -49,6 +49,7 @@
   box-shadow: 0 10px 25px rgba(0, 0, 0, 0.2);
   background-color: var(--glass-bg);
   backdrop-filter: blur(5px);
+  -webkit-backdrop-filter: blur(5px);
   border: 1px solid var(--border-color);
   transition: transform 0.3s ease, box-shadow 0.3s ease;
   opacity: 0;
@@ -177,6 +178,7 @@
   overflow: hidden;
   transition: all 0.3s ease;
   text-decoration: none;
+  margin-right: 20px;
 }
 
 .viewProject::before {
