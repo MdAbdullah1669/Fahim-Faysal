@@ -1032,6 +1032,41 @@ const AdminDashboard = () => {
     setShowSearchResults(results.length > 0);
   };
 
+  // Add the export function after other utility functions
+  const exportPortfolioData = () => {
+    try {
+      const data = portfolioService.getAllData();
+      
+      // Create formatted JSON string with indentation for better readability
+      const jsonData = JSON.stringify(data, null, 2);
+      
+      // Create a blob from the data
+      const blob = new Blob([jsonData], { type: 'application/json' });
+      
+      // Create a temporary download link
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = 'portfolio_data.json';
+      
+      // Trigger download
+      document.body.appendChild(a);
+      a.click();
+      
+      // Clean up
+      setTimeout(() => {
+        document.body.removeChild(a);
+        URL.revokeObjectURL(url);
+      }, 100);
+      
+      // Show notification
+      showNotification("Portfolio data exported successfully", "success");
+    } catch (error) {
+      console.error("Error exporting portfolio data:", error);
+      showNotification("Error exporting portfolio data", "error");
+    }
+  };
+
   return (
     <div className={styles["admin-dashboard"]}>
       {/* Side Navigation */}
@@ -3740,6 +3775,26 @@ const AdminDashboard = () => {
                       {passwordError}
                     </div>
                   )}
+                </div>
+
+                {/* Data Management Section */}
+                <div className={styles["form-section"]}>
+                  <h3 className={styles["form-section-title"]}>
+                    Data Management
+                  </h3>
+                  
+                  <div className={styles["data-export-section"]}>
+                    <p>Export your portfolio data to use in production deployment:</p>
+                    <button 
+                      className={`${styles["action-btn"]} ${styles["export"]}`}
+                      onClick={exportPortfolioData}
+                    >
+                      <i className="fas fa-download"></i> Export Portfolio Data
+                    </button>
+                    <p className={styles["export-note"]}>
+                      After exporting, replace the data in <code>public/production-data.js</code> with your exported data.
+                    </p>
+                  </div>
                 </div>
               </div>
             </div>

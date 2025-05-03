@@ -12,6 +12,9 @@ const KEYS = {
   PORTFOLIO_VIEWS: "portfolio_views_count",
 };
 
+// Production data flag - used to check if production data has been loaded
+const PRODUCTION_DATA_LOADED = "portfolio_production_data_loaded";
+
 // Function to save data to localStorage and sessionStorage for persistence
 const saveToStorage = (key, data) => {
   try {
@@ -302,6 +305,42 @@ const validateAllLinks = () => {
 // Initialize local storage with default data if not already present
 const initializeStorage = () => {
   console.log("Initializing storage and checking for existing data...");
+
+  // Check if we're in production environment (Netlify)
+  const isProduction = window.location.hostname !== "localhost" && window.location.hostname !== "127.0.0.1";
+  
+  // Check if we've already loaded production data
+  const productionDataLoaded = localStorage.getItem(PRODUCTION_DATA_LOADED);
+  
+  // If in production and production data hasn't been loaded yet, initialize with production data
+  if (isProduction && !productionDataLoaded) {
+    console.log("Production environment detected. Loading production data...");
+    
+    try {
+      // Load production data if available (from window object)
+      if (window.PORTFOLIO_PRODUCTION_DATA) {
+        const productionData = window.PORTFOLIO_PRODUCTION_DATA;
+        
+        // Save all sections from production data
+        if (productionData.personalInfo) saveToStorage(KEYS.PERSONAL_INFO, productionData.personalInfo);
+        if (productionData.education) saveToStorage(KEYS.EDUCATION, productionData.education);
+        if (productionData.experience) saveToStorage(KEYS.EXPERIENCE, productionData.experience);
+        if (productionData.skills) saveToStorage(KEYS.SKILLS, productionData.skills);
+        if (productionData.projects) saveToStorage(KEYS.PROJECTS, productionData.projects);
+        if (productionData.highlights) saveToStorage(KEYS.HIGHLIGHTS, productionData.highlights);
+        if (productionData.pictures) saveToStorage(KEYS.PICTURES, productionData.pictures);
+        if (productionData.references) saveToStorage(KEYS.REFERENCES, productionData.references);
+        if (productionData.settings) saveToStorage(KEYS.SETTINGS, productionData.settings);
+        
+        // Mark that we've loaded production data
+        localStorage.setItem(PRODUCTION_DATA_LOADED, "true");
+        console.log("Production data loaded successfully");
+        return;
+      }
+    } catch (error) {
+      console.error("Error loading production data:", error);
+    }
+  }
 
   // Validate all existing links
   validateAllLinks();
