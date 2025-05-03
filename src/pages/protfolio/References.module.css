@@ -148,6 +148,7 @@
 .glassCard {
   background-color: var(--glass-bg);
   backdrop-filter: blur(5px);
+  -webkit-backdrop-filter: blur(5px);
   border: 1px solid var(--border-color);
   border-radius: 12px;
   box-shadow: 0 5px 15px rgba(0, 0, 0, 0.2);

@@ -148,10 +148,7 @@ const Skills = () => {
       <div className={styles.container}>
         <h2 className={styles.sectionTitle}>Skills & Expertise</h2>
         
-        <p className={styles.skillsIntro}>
-          With a diverse set of skills spanning technical and soft competencies, I bring a well-rounded approach to every project.
-          My passion for continuous learning keeps my skills current with the latest technologies and best practices.
-        </p>
+        <p className={styles.skillsIntro}> I bring a balanced mix of technical and soft skills to every project, driven by a passion for continuous learning and staying up-to-date with the latest technologies. </p>
         
         <div className={styles.skillsHeader}>
           <button 
